@@ -467,6 +467,19 @@ These constraints apply throughout Phase 2 execution. Violating them is the prim
 
 The test: would a senior engineer say this is overcomplicated? If yes, simplify.
 
+### Completeness
+
+Do not confuse simplicity with incompleteness. When a feature is requested, implement it fully:
+
+- Tests: cover happy path, edge cases, and error paths — not just the obvious case.
+- Error handling: handle errors that CAN happen. Skip only truly impossible scenarios.
+- Edge cases: if the spec mentions them or they are obvious from the domain, handle them now.
+- Validation: validate at system boundaries completely, not partially.
+
+The marginal cost of completeness is near-zero with AI assistance. "Defer to follow-up" is legacy thinking when the full implementation costs seconds more than the shortcut. Do the complete thing.
+
+**The distinction:** Simplicity First says "don't add what wasn't asked." Completeness says "what WAS asked, do 100% — not 90%."
+
 ### Surgical Changes
 
 - Do not "improve" adjacent code, comments, or formatting.
