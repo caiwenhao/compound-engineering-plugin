@@ -31,6 +31,13 @@ This skill does not implement code. It explores, clarifies, and documents decisi
 2. **Prefer single-select multiple choice** - Use single-select when choosing one direction, one priority, or one next step.
 3. **Use multi-select rarely and intentionally** - Use it only for compatible sets such as goals, constraints, non-goals, or success criteria that can all coexist. If prioritization matters, follow up by asking which selected item is primary.
 4. **Use the platform's question tool when available** - When asking the user a question, prefer the platform's blocking question tool if one exists (`AskUserQuestion` in Claude Code, `request_user_input` in Codex, `ask_user` in Gemini). Otherwise, present numbered options in chat and wait for the user's reply before proceeding.
+5. **Grill, don't interview (Standard/Deep only)** - For Standard and Deep brainstorms, adopt a challenging posture:
+   - Every question must include your **recommended answer** with reasoning. The user can accept, reject, or modify.
+   - Walk down each branch of the decision tree. Do not skip branches or converge prematurely.
+   - **Challenge the user's answers** — "You said X, but what about scenario Y?" / "Are you sure? That conflicts with Z."
+   - If a question can be answered by reading the codebase, **read the code instead of asking**. Only ask when the answer requires user judgment or domain knowledge not in the code.
+   - Do not accept vague answers. Push for specifics: "What exactly do you mean by 'flexible'?" / "Give me a concrete example of when this would happen."
+6. **Lightweight mode stays light** - For Lightweight brainstorms, keep questions brief and non-challenging. Accept answers at face value and move quickly.
 
 ## Output Guidance
 
@@ -89,6 +96,15 @@ Scan the repo before substantive brainstorming. Match depth to scope:
 *Constraint Check* — Check project instruction files (`AGENTS.md`, and `CLAUDE.md` only if retained as compatibility context) for workflow, product, or scope constraints that affect the brainstorm. If these add nothing, move on.
 
 *Topic Scan* — Search for relevant terms. Read the most relevant existing artifact if one exists (brainstorm, plan, spec, skill, feature doc). Skim adjacent examples covering similar behavior.
+
+*Domain Language Check (Standard/Deep only)* — Look for `CONTEXT.md` at the repo root (or `CONTEXT-MAP.md` for multi-context repos). If found, read it and use the project's domain vocabulary throughout the brainstorm. During dialogue:
+- If the user uses a term that conflicts with CONTEXT.md, challenge immediately: "Your glossary defines 'X' as Y, but you seem to mean Z — which is it?"
+- If the user uses vague or overloaded terms, propose a precise canonical term: "You're saying 'account' — do you mean the Customer or the User?"
+- When a new term is resolved during the brainstorm, update CONTEXT.md inline (do not batch)
+
+Also check `docs/adr/` for existing architecture decisions in the area being discussed. Do not re-litigate decisions already recorded in ADRs unless the user explicitly wants to revisit them.
+
+If neither `CONTEXT.md` nor `docs/adr/` exists, note their absence. Create them lazily — only when the first term or decision needs to be recorded (see Domain Knowledge Persistence below).
 
 If nothing obvious appears after a short scan, say so and continue. Two rules govern technical depth during the scan:
 
@@ -286,6 +302,60 @@ If a document contains outstanding questions:
 - Put technical questions, or questions that require validation or research, under `Deferred to Planning` when they are better answered there
 - Use tags like `[Needs research]` when the planner should likely investigate the question rather than answer it from repo context alone
 - Carry deferred questions forward explicitly rather than treating them as a failure to finish the requirements doc
+
+### Phase 3.1: Domain Knowledge Persistence (Standard/Deep only)
+
+After the requirements document is written but before document review, persist any domain knowledge that crystallized during the brainstorm.
+
+#### CONTEXT.md Updates
+
+If new domain terms were resolved during the brainstorm (terminology clarified, concepts named, ambiguities resolved):
+
+1. If `CONTEXT.md` does not exist, create it at the repo root with this structure:
+
+```markdown
+# <Project Name>
+
+<One sentence: what this project is.>
+
+## Language
+
+**<Term>**:
+<Concise definition — what it IS, not what it does. One sentence max.>
+_Avoid_: <synonyms to not use>
+```
+
+2. If `CONTEXT.md` exists, add new terms or update existing ones inline.
+
+Rules:
+- Be opinionated — pick one canonical term, list others as "Avoid"
+- Keep definitions tight — one sentence max
+- Only include terms specific to this project's domain, not general programming concepts
+- Show relationships between terms when they exist
+- Flag resolved ambiguities explicitly
+
+#### ADR Creation
+
+If architectural decisions were made during the brainstorm, evaluate each against the three-condition gate:
+
+1. **Hard to reverse** — changing later has meaningful cost
+2. **Surprising without context** — a future reader would wonder "why?"
+3. **Result of a real trade-off** — genuine alternatives existed
+
+All three must be true to warrant an ADR. Most brainstorms will not produce ADRs.
+
+If an ADR is warranted:
+1. Create `docs/adr/` if it does not exist
+2. Scan for the highest existing number, increment by one
+3. Write the ADR as `docs/adr/NNNN-slug.md`:
+
+```markdown
+# <Short title of the decision>
+
+<1-3 sentences: context, decision, and why.>
+```
+
+Keep ADRs minimal. Only add "Considered Options" or "Consequences" sections when they add genuine value.
 
 ### Phase 3.5: Document Review
 

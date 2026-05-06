@@ -233,6 +233,27 @@ Summarize:
 - Related issues, PRs, or prior art
 - Any constraints that should materially shape the plan
 
+#### 1.4a Architecture Depth Analysis (Standard/Deep only)
+
+During research consolidation, evaluate the modules that will be touched or created by this plan using the **deep module** framework:
+
+- **Deep module** — small interface, rich implementation. High leverage for callers, high locality for maintainers.
+- **Shallow module** — interface nearly as complex as the implementation. Low leverage, often a pass-through.
+
+**Deletion test:** For each existing module in the change area, imagine deleting it. If complexity vanishes, it was a pass-through (shallow). If complexity reappears across N callers, it was earning its keep (deep).
+
+**What to look for:**
+- Modules in the change area that are shallow — interface nearly as complex as implementation, or pure pass-throughs
+- Opportunities to deepen existing modules by absorbing related complexity behind a simpler interface
+- Whether the planned new code would create shallow modules (e.g., a "service" that just delegates to one other thing)
+
+**How to use findings:**
+- If the plan would create new shallow modules, redesign them to be deeper before finalizing units
+- If existing shallow modules in the change area can be deepened as part of this work (without expanding scope unreasonably), include a dedicated implementation unit for the improvement
+- Note architecture observations in the plan's "Technical Design" or "Risks" section so reviewers can validate the judgment
+
+Do not force architectural improvements unrelated to the current work. Only surface opportunities that are in the natural path of the planned changes.
+
 #### 1.4b Reclassify Depth When Research Reveals External Contract Surfaces
 
 If the current classification is **Lightweight** and Phase 1 research found that the work touches any of these external contract surfaces, reclassify to **Standard**:

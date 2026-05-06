@@ -124,6 +124,7 @@ Routing rules:
 | `compound-engineering:review:data-migrations-reviewer` | Migrations, schema changes, backfills |
 | `compound-engineering:review:reliability-reviewer` | Error handling, retries, timeouts, background jobs |
 | `compound-engineering:review:adversarial-reviewer` | Diff >=50 changed non-test/non-generated/non-lockfile lines, or auth, payments, data mutations, external APIs |
+| `compound-engineering:review:architecture-depth-reviewer` | Diff introduces new classes, modules, services, wrapper layers, or abstraction boundaries |
 | `compound-engineering:review:cli-readiness-reviewer` | CLI command definitions, argument parsing, CLI framework usage, command handler implementations |
 | `compound-engineering:review:previous-comments-reviewer` | Reviewing a PR that has existing review comments or threads |
 

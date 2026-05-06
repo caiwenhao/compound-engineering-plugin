@@ -44,20 +44,41 @@ If on the default branch, recommend creating a feature branch (e.g., `fix/<short
 
 ---
 
-## Step 1: Reproduce
+## Step 1: Build a Feedback Loop
 
-**Goal:** A stable, repeatable reproduction of the bug with a failing assertion.
+**Goal:** A fast, deterministic, repeatable pass/fail signal for the bug. This is the most important step — with a good feedback loop, the bug is 90% fixed.
 
-**How:** Load the `reproduce-bug` skill if the input is a GitHub issue URL. Otherwise, reproduce manually:
+**How:** Load the `reproduce-bug` skill if the input is a GitHub issue URL. Otherwise, build the loop manually.
 
-1. Parse the bug report for: expected behavior, actual behavior, steps to trigger, error messages, stack traces
-2. Identify the minimal reproduction path
-3. Write a failing test (or run a command) that demonstrates the bug
-4. Confirm the failure is stable (run it twice)
+### Strategies (try in roughly this order)
 
-**Gate:** If reproduction fails after reasonable effort, STOP. Ask the user for more context — environment details, exact steps, sample data. Do not proceed to root-cause without a confirmed reproduction.
+1. **Failing test** — at whatever seam reaches the bug (unit, integration, e2e)
+2. **Curl / HTTP script** — against a running dev server
+3. **CLI invocation** — with a fixture input, diffing stdout against known-good output
+4. **Headless browser script** — drives the UI, asserts on DOM/console/network
+5. **Replay a captured trace** — save a real request/payload/event log, replay through the code path in isolation
+6. **Throwaway harness** — spin up a minimal subset of the system that exercises the bug path with a single function call
+7. **Property / fuzz loop** — if the bug is "sometimes wrong output", run 1000 random inputs and look for the failure mode
+8. **Bisection harness** — if the bug appeared between two known states, automate `git bisect run`
+9. **Differential loop** — run the same input through old-version vs new-version and diff outputs
+10. **Manual-assisted script** — last resort when a human must interact; structure it so captured output feeds back for analysis
 
-**Output:** A failing test or reproducible command that reliably triggers the bug.
+### Iterate on the loop
+
+Once a loop exists, improve it:
+- **Faster?** Cache setup, skip unrelated init, narrow test scope
+- **Sharper signal?** Assert on the specific symptom, not just "didn't crash"
+- **More deterministic?** Pin time, seed RNG, isolate filesystem, freeze network
+
+A 30-second flaky loop is barely better than no loop. A 2-second deterministic loop is a debugging superpower.
+
+### Non-deterministic bugs
+
+The goal is a higher reproduction rate, not a clean repro. Loop the trigger 100x, parallelize, add stress, narrow timing windows, inject sleeps. A 50%-flake is debuggable; 1% is not — keep raising the rate.
+
+**Gate:** If no feedback loop can be constructed after reasonable effort, STOP. Ask the user for: access to the reproducing environment, a captured artifact (HAR file, log dump, core dump, screen recording), or permission to add temporary instrumentation. Do not proceed without a loop.
+
+**Output:** A repeatable pass/fail signal that reliably demonstrates the bug.
 
 ---
 
@@ -69,6 +90,14 @@ If on the default branch, recommend creating a feature branch (e.g., `fix/<short
 - Hypothesis-driven investigation (not trial-and-error)
 - Evidence collection before conclusions
 - Falsifiable hypotheses tested one at a time
+
+### Instrumentation discipline
+
+When adding debug logging or instrumentation during investigation:
+
+- **Tag every debug log** with a unique prefix: `[DEBUG-xxxx]` (4 random hex chars). Example: `console.log("[DEBUG-a4f2] order state:", order.status)`
+- This makes cleanup trivial — a single grep removes all instrumentation
+- Never use untagged `console.log` or `print` for debugging — they survive and pollute
 
 Trust the skill's internal loop and stopping conditions. If it returns without a root cause (unable to locate), STOP and report findings to the user — do not attempt a fix without understanding the cause.
 
@@ -103,11 +132,12 @@ Trust the skill's internal loop and stopping conditions. If it returns without a
 
 1. Run the reproduction test — must pass
 2. Run the full test suite — no new failures
-3. Invoke `ce:review mode:autofix` on the changes — apply safe fixes, surface anything concerning
+3. **Remove all `[DEBUG-xxxx]` instrumentation** — grep for the tag prefix and delete every tagged line
+4. Invoke `ce:review mode:autofix` on the changes — apply safe fixes, surface anything concerning
 
 **Gate:** If the test suite has new failures, return to Step 3. If `ce-review` surfaces serious concerns, address them before proceeding.
 
-**Output:** All tests pass, review clean.
+**Output:** All tests pass, review clean, no debug instrumentation remaining.
 
 ---
 
