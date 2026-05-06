@@ -392,16 +392,17 @@ Step 4: 验证
 | Skill | 阶段 | 角色 |
 |---|---|---|
 | `ce-flow` | 入口 | 智能编排器，状态检测 + 意图路由 |
+| `ce-init` | 初始化 | 为项目生成 AGENTS.md + CLAUDE.md |
 | `ce-brainstorm` | brainstorm | 需求定义（grill 风格 + 术语沉淀） |
 | `ce-ideate` | brainstorm | 创意发散 |
 | `document-review` | brainstorm, plan | 文档多人格审查 |
 | `ce-plan` | plan | 计划创建（含架构深度分析） |
-| `ce-work` | code | 执行 Implementation Units + post-cleanup |
+| `ce-work` | code | 执行 Implementation Units + post-cleanup + Coding Discipline |
 | `ce-review` | code (autofix), review | 多角色代码审查（含 architecture-depth-reviewer） |
 | `ce-debug` | bug fix | 编排器：反馈循环 -> 根因 -> 修复 -> 验证 |
 | `git-commit` | ship | 单次提交 |
 | `git-commit-push-pr` | ship | 提交 + 推送 + 开 PR |
-| `ce-compound` | ship (post-hook) | 知识沉淀 |
+| `ce-compound` | ship (post-hook) | 知识沉淀 + 规范回流 |
 
 ### 行为纪律（superpowers）
 
