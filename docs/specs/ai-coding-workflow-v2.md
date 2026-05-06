@@ -3,28 +3,29 @@
 基于 compound-engineering（执行引擎）+ superpowers（行为纪律）的自包含研发流程。
 
 ```
-┌────────────────────────────────────────────────────────────────┐
-│                    AI Coding 研发流程 v2                         │
-│                                                                │
-│  ┌──────────────────────────────────────────────────────────┐  │
-│  │           flow -- 智能编排器（单一入口）                    │  │
-│  │  自动检测当前阶段 -> 自动推进 -> 遇阻塞停下                 │  │
-│  └──────────────────────────────────────────────────────────┘  │
-│      |                                                         │
-│  ┌────────┐  ┌────────┐  ┌────────┐  ┌────────┐  ┌────────┐  │
-│  │brainstorm│->│  plan  │->│  code  │->│ review │->│  ship  │  │
-│  │ ce-brain │  │ ce-plan│  │ce-work │  │ce-code │  │ce-commit│  │
-│  │ storm    │  │        │  │        │  │-review │  │-push-pr│  │
-│  └────────┘  └────────┘  └────────┘  └────────┘  └────────┘  │
-│                                                        |       │
-│                                                   [post-hook]  │
-│                                                   ce-compound  │
-│                                                                │
-│  ┌──────────────────────────────────────────────────────────┐  │
-│  │  Bug Fix 快速路径（检测到 bug 意图时）                      │  │
-│  │  ce-debug -> code -> review -> ship                        │  │
-│  └──────────────────────────────────────────────────────────┘  │
-└────────────────────────────────────────────────────────────────┘
++----------------------------------------------------------------+
+|                    AI Coding 研发流程 v2                         |
+|                                                                |
+|  +----------------------------------------------------------+  |
+|  |           ce-flow -- 智能编排器（单一入口）                 |  |
+|  |  状态检测 -> 意图分类 -> 阶段路由 -> 自动推进/遇阻塞停下   |  |
+|  +----------------------------------------------------------+  |
+|      |                                                         |
+|  +--------+  +--------+  +--------+  +--------+  +--------+  |
+|  |brainstorm|->|  plan  |->|  code  |->| review |->|  ship  |  |
+|  |ce-brain- |  | ce-plan|  |ce-work |  |ce-review|  |git-com-|  |
+|  |storm     |  |        |  |        |  |        |  |mit-push|  |
+|  +--------+  +--------+  +--------+  +--------+  |-pr     |  |
+|                                                    +--------+  |
+|                                                        |       |
+|                                                   [post-hook]  |
+|                                                   ce-compound  |
+|                                                                |
+|  +----------------------------------------------------------+  |
+|  |  Bug Fix 快速路径（LLM 意图判断触发）                      |  |
+|  |  ce-debug -> review -> ship                                |  |
+|  +----------------------------------------------------------+  |
++----------------------------------------------------------------+
 ```
 
 ---
@@ -33,26 +34,32 @@
 
 | 层 | 来源 | 角色 |
 |---|---|---|
-| **执行引擎** | compound-engineering-plugin | brainstorm/plan/work/review/commit/debug/compound — 实际做事的 skill |
-| **行为纪律** | superpowers | TDD 反合理化、证据验证、worktree 隔离、systematic-debugging — 约束怎么做事 |
+| **执行引擎** | compound-engineering-plugin | brainstorm/plan/work/review/debug/compound -- 实际做事的 skill |
+| **行为纪律** | superpowers | TDD 反合理化、证据验证、worktree 隔离、systematic-debugging -- 约束怎么做事 |
 
 两层组合 = 自包含研发能力。无其他外部依赖。
 
 ---
 
-## flow -- 智能编排器
+## ce-flow -- 智能编排器
 
-单一入口，自动检测当前状态并路由到正确阶段。
+单一入口（`/ce:flow`），自动检测当前状态并路由到正确阶段。与 `lfg`/`slfg` 共存——后者是"全自动交付流水线"，ce-flow 是"智能路由器"。
 
 ### 场景检测（按优先级）
 
 | 信号 | 检测方式 | 路由结果 |
 |---|---|---|
-| 不在任务工作区 | `git rev-parse --abbrev-ref HEAD` | 调用 `using-git-worktrees` 创建工作区 |
-| 有未完成工作 | plan status + git status + PR | 恢复到中断的阶段 |
-| Bug 修复意图 | 关键词（bug/fix/修复/报错/crash） | Bug Fix 快速路径 |
-| 用户输入意图 | 意图分类 | 路由到匹配阶段 |
-| 存在已有产物 | 扫描 docs/ | 跳到最近的未完成阶段 |
+| 不在 feature branch | `git branch --show-current` | 推荐创建 feature branch（不强制 worktree） |
+| 有未完成工作 | plan status + git status + PR | 展示已有产物，用户确认后恢复到中断阶段 |
+| Bug 修复意图 | LLM 意图判断（非关键词匹配） | Bug Fix 快速路径 |
+| 用户输入意图 | LLM 意图分类 | 路由到匹配阶段 |
+| 存在已有产物 | 扫描 docs/ + 用户确认 | 跳到最近的未完成阶段 |
+
+### 意图分类
+
+不使用关键词匹配。LLM 根据自然语言理解判断：
+- Bug 修复信号：有错误信息、"应该 X 但实际 Y"、stack trace、引用 issue
+- 新功能信号："add"、"build"、"create"、"improve"、"I want"
 
 ### GATE 策略
 
@@ -62,12 +69,16 @@
 |---|---|
 | 当前阶段通过，下一步明确 | 自动继续 |
 | 需要用户决策（多条路线、风险取舍） | 停下，展示选项 |
-| Hard blocker（测试失败、工作区缺失、merge conflict） | 停下 |
+| Hard blocker（测试失败、merge conflict） | 停下 |
 | 进入 ship 但无显式授权 | 停下，请求交付授权 |
+
+### 产物传递
+
+ce-flow 在会话中维护状态变量，直接传递每个阶段的产出路径给下一阶段。扫描 `docs/` 仅作为恢复中断会话的 fallback。
 
 ### 主干同步
 
-ship 前强制 rebase origin/main。rebase 有冲突则协助解决后继续。
+ship 前按需 rebase origin/main：先检测 `git merge-base --is-ancestor origin/main HEAD`，落后时才 rebase。冲突时停下协助解决。
 
 ### 阶段跳过规则
 
@@ -86,7 +97,24 @@ ship 前强制 rebase origin/main。rebase 有冲突则协助解决后继续。
 >
 > 核心 skill：`ce-brainstorm`
 >
-> 核心产出：需求文档（带 R-ID）
+> 核心产出：需求文档（带 R-ID）+ CONTEXT.md 更新 + ADR（条件触发）
+
+### 交互风格
+
+- **Standard/Deep 模式**：采用 grill-me 追问风格
+  - 每个问题附带推荐答案 + 理由
+  - 走决策树所有分支，不提前收敛
+  - 挑战用户回答（"你确定？如果 X 场景呢？"）
+  - 能读代码回答的问题，读代码而不是问用户
+  - 不接受模糊回答，追问具体细节
+- **Lightweight 模式**：保持轻量，快速确认即可
+
+### 领域知识沉淀
+
+brainstorm 过程中同步维护领域知识：
+
+- **CONTEXT.md**：开始时主动读取项目术语表，对话中检测术语冲突即时挑战，新术语解决后立刻写入。懒创建（不存在时第一次需要时创建）。
+- **ADR**：满足三条件（难以逆转 + 没上下文会困惑 + 真正的权衡结果）时写入 `docs/adr/`。高门槛，大多数 brainstorm 不会产生 ADR。
 
 ### 路由
 
@@ -94,24 +122,24 @@ ship 前强制 rebase origin/main。rebase 有冲突则协助解决后继续。
 用户输入
     |
     +-- 无方向 -----------> ce-ideate (排名创意) -> ce-brainstorm
-    +-- 模糊想法 ---------> ce-brainstorm (Standard/Deep)
+    +-- 模糊想法 ---------> ce-brainstorm (Standard/Deep, grill 风格)
     +-- 明确小需求 -------> ce-brainstorm (Lightweight)
     |
     v
-ce-doc-review (条件触发: R-ID >8 / 高风险 / 用户要求)
+document-review (条件触发: R-ID >8 / 高风险 / 用户要求)
 ```
 
 | Skill | 角色 |
 |---|---|
 | `ce-ideate` | 创意发散，无方向时生成候选 |
-| `ce-brainstorm` | 需求定义（唯一出口），产出 R-ID 需求文档 |
-| `ce-doc-review` | 多人格审查（条件触发） |
+| `ce-brainstorm` | 需求定义（唯一出口），产出 R-ID 需求文档 + CONTEXT.md/ADR 更新 |
+| `document-review` | 多人格审查（条件触发） |
 
 ### 审查门禁
 
 | 信号 | 动作 |
 |---|---|
-| Deep brainstorm / R-ID >8 / 高风险 | 强制 `ce-doc-review` |
+| Deep brainstorm / R-ID >8 / 高风险 | 强制 `document-review` |
 | Lightweight 且无风险信号 | opt-in |
 
 审查循环：审查 -> 修复 -> 再审查，直到零 P0/P1、达 3 轮上限、或收敛。
@@ -124,7 +152,15 @@ ce-doc-review (条件触发: R-ID >8 / 高风险 / 用户要求)
 >
 > 核心 skill：`ce-plan`
 >
-> 核心产出：计划文档（Implementation Units + Test Scenarios）
+> 核心产出：计划文档（Implementation Units + Test Scenarios + 架构深度分析）
+
+### 架构深度分析（Standard/Deep）
+
+plan 阶段研究时主动识别变更区域的架构摩擦点：
+- 用深模块/浅模块框架评估现有模块和计划新建的模块
+- 浅模块（接口复杂度 ≈ 实现复杂度）标记为改进机会
+- 在自然路径上的架构改进纳入 Implementation Units
+- 不强制改进与当前工作无关的模块
 
 ### 路由
 
@@ -134,17 +170,18 @@ ce-doc-review (条件触发: R-ID >8 / 高风险 / 用户要求)
     v
 ce-plan
     |  并行研究 Agent (repo-research + learnings + best-practices)
+    |  架构深度分析（深模块/浅模块评估）
     |  Requirements Trace 回链需求文档
     |  Implementation Units (垂直切片，非水平分层)
     |  Test Scenarios
     |
     v
-ce-doc-review (强制)
+document-review (强制)
 ```
 
 ### 审查门禁
 
-`ce-doc-review` 强制通过后才能进入 code 阶段。循环同上。
+`document-review` 强制通过后才能进入 code 阶段。循环同上。
 
 ### 反模式：水平切片
 
@@ -171,14 +208,11 @@ Implementation Unit 必须是端到端垂直切片，不是单层水平切片。
 计划文档
     |
     v
-ce-work (按 2-3 个 Implementation Units 切批执行)
-    |
-    每批完成后:
-    |  -> ce-code-review mode:autofix (只处理 safe_auto)
+ce-work (执行所有 Implementation Units)
     |
     所有 Unit 完成后:
-    |  -> ce-simplify-code (复用/质量/效率三维清理)
-    |  -> final ce-code-review mode:autofix
+    |  -> simplify (superpowers: 复用/质量/效率三维清理)
+    |  -> ce-review mode:autofix (只处理 safe_auto)
 ```
 
 ### 自动触发的辅助能力
@@ -202,7 +236,7 @@ ce-work (按 2-3 个 Implementation Units 切批执行)
 
 > 总体审查，处理需要裁决的问题。
 >
-> 核心 skill：`ce-code-review`
+> 核心 skill：`ce-review`
 >
 > 核心产出：PASS / NEEDS_WORK 裁决
 
@@ -212,16 +246,18 @@ ce-work (按 2-3 个 Implementation Units 切批执行)
 代码变更
     |
     v
-ce-code-review interactive (多轮循环最多 3 轮)
+ce-review interactive (多轮循环最多 3 轮)
     |
-    |-- 始终启用 persona: correctness, testing, maintainability, project-standards
+    |-- 始终启用 persona: correctness, testing, maintainability, project-standards, agent-native
     |
     |-- 按 diff 内容自动启用 persona:
-    |   auth/session       -> security-reviewer
-    |   DB/cache/async     -> performance-reviewer
-    |   routes/serializer  -> api-contract-reviewer
-    |   db/migrate/schema  -> data-migrations-reviewer
-    |   diff >= 50 行      -> adversarial-reviewer
+    |   auth/session            -> security-reviewer
+    |   DB/cache/async          -> performance-reviewer
+    |   routes/serializer       -> api-contract-reviewer
+    |   db/migrate/schema       -> data-migrations-reviewer
+    |   diff >= 50 行           -> adversarial-reviewer
+    |   新建 class/module/service -> architecture-depth-reviewer
+    |   CLI 命令定义             -> cli-readiness-reviewer
     |
     v
 置信度过滤 (>=0.60)
@@ -242,41 +278,40 @@ safe_auto 自动修复 -> gated_auto/manual 交用户裁决
 
 ## Phase 5: Ship -- "交付"
 
-> 从代码到合并/PR。
+> 从代码到 PR。
 >
-> 核心 skill：`ce-commit-push-pr` / `ce-commit`
+> 核心 skill：`git-commit-push-pr`
 >
-> 核心产出：PR 或合并到 main
+> 核心产出：PR
 
 ### 前置
 
-- 强制 rebase origin/main
+- 按需 rebase origin/main（检测是否落后，落后才 rebase）
 - Phase 4 PASS 证据绑定当前 diff
 
-### 两条路径
+### 路径
 
 ```
 验证通过的代码
   |
-  [强制: git rebase origin/main]
+  [按需: git rebase origin/main]
   |
-  +-- 用户要求合并到 main -----> squash merge + 中文 commit -> push main
-  |                              -> 自动删除 worktree
-  |
-  +-- 用户要求 PR -------------> ce-commit-push-pr
-                                  -> 自动删除 worktree
+  v
+git-commit-push-pr -> PR
 ```
+
+不提供直接 push main 的路径。所有交付通过 PR 完成。
 
 ### Post-hook: 知识沉淀
 
-ship 完成后自动触发 `ce-compound`：
+ship 完成后自动触发 `ce-compound`（ce-flow 自动调用，不需要用户记得）：
 - 非平凡 bug 已解决 -> 记录解决方案到 `docs/solutions/`
 - 新架构/模式 -> 记录可复用经验
-- 机械修改/无新知识 -> 跳过
+- 机械修改/无新知识 -> 跳过（skill 内部判断）
 
-### Worktree 清理
+### Worktree 策略
 
-合并/PR 确认后，自动删除当前任务 worktree + 本地 feature branch。
+ce-flow 推荐使用 worktree 但不强制。用户可以选择 feature branch 或 worktree。
 
 ---
 
@@ -284,36 +319,43 @@ ship 完成后自动触发 `ce-compound`：
 
 > 检测到 bug 修复意图时，跳过 brainstorm/plan，进入专用修复流程。
 >
+> 核心 skill：`ce-debug`（编排器，串联 reproduce-bug + systematic-debugging + ce-work + ce-review）
+>
 > 核心原则：**根因先于修复**。
 
 ```
 用户报告 bug
     |
     v
-Signal 0: 工作区检查
+Signal 0: 工作区检查（推荐 feature branch）
     |
     v
-Step 1: 复现 (ce-debug Phase 1)
-    产出: 可稳定触发的复现步骤 + 失败断言
-    ⛔ 无法复现 -> 停下要更多上下文
+Step 1: 构建反馈循环 (ce-debug)
+    10 种策略（failing test / curl / CLI / headless browser /
+    replay trace / throwaway harness / fuzz / bisect / differential / manual-assisted）
+    产出: 快速、确定性的 pass/fail 信号
+    ⛔ 无法构建 -> 停下要更多上下文
     |
     v
-Step 2: 根因定位 (ce-debug Phase 2-3)
-    3-5 个可证伪假设，逐一验证
+Step 2: 根因定位 (systematic-debugging skill)
+    假设驱动，逐一证伪
+    [DEBUG-xxxx] 标签化所有调试日志
     产出: 定位到具体代码行 + 因果链
-    ⛔ 3 轮失败 -> 停下质疑架构
+    ⛔ skill 内部判断无法定位 -> 停下报告
     |
     v
-Step 3: 修复 (= code 子集)
-    TDD: 复现固化为回归测试(RED) -> 最小修复(GREEN)
+Step 3: 修复 (TDD)
+    复现固化为回归测试(RED) -> 最小修复(GREEN)
     不扩大修复范围
     |
     v
-Step 4: 验证 (= review 子集)
+Step 4: 验证
     回归测试通过 + 全量测试无新失败
+    清理所有 [DEBUG-xxxx] 标签日志
+    ce-review mode:autofix
     |
     v
--> ship (同标准路径)
+-> ship (用户触发)
 ```
 
 ---
@@ -327,8 +369,8 @@ Step 4: 验证 (= review 子集)
 | 3 | **根因先于修复** -- 不理解为什么坏就不能修 | `systematic-debugging` (superpowers) + `ce-debug` |
 | 4 | **证据先于断言** -- 没跑命令不能说"通过了" | `verification-before-completion` (superpowers) |
 | 5 | **验证先于采纳** -- 审查反馈先验证再实现 | `receiving-code-review` (superpowers) |
-| 6 | **工作区先于工作** -- 必须在任务专属 worktree 中 | `using-git-worktrees` (superpowers) |
-| 7 | **提交由用户触发** -- Phase 1-4 不 commit/push/PR | `ce-commit-push-pr` |
+| 6 | **隔离推荐** -- 推荐在 feature branch/worktree 中工作，不强制 | `using-git-worktrees` (superpowers) |
+| 7 | **提交由用户触发** -- Phase 1-4 不 commit/push/PR | `git-commit-push-pr` |
 
 ---
 
@@ -349,16 +391,16 @@ Step 4: 验证 (= review 子集)
 
 | Skill | 阶段 | 角色 |
 |---|---|---|
-| `ce-brainstorm` | brainstorm | 需求定义 |
+| `ce-flow` | 入口 | 智能编排器，状态检测 + 意图路由 |
+| `ce-brainstorm` | brainstorm | 需求定义（grill 风格 + 术语沉淀） |
 | `ce-ideate` | brainstorm | 创意发散 |
-| `ce-doc-review` | brainstorm, plan | 文档多人格审查 |
-| `ce-plan` | plan | 计划创建 |
-| `ce-work` | code | 批量执行 Implementation Units |
-| `ce-simplify-code` | code | 复用/质量/效率清理 |
-| `ce-code-review` | code (autofix), review | 多角色代码审查 |
-| `ce-debug` | bug fix | 根因定位 + 修复 |
-| `ce-commit` | ship | 单次提交 |
-| `ce-commit-push-pr` | ship | 提交 + 推送 + 开 PR |
+| `document-review` | brainstorm, plan | 文档多人格审查 |
+| `ce-plan` | plan | 计划创建（含架构深度分析） |
+| `ce-work` | code | 执行 Implementation Units + post-cleanup |
+| `ce-review` | code (autofix), review | 多角色代码审查（含 architecture-depth-reviewer） |
+| `ce-debug` | bug fix | 编排器：反馈循环 -> 根因 -> 修复 -> 验证 |
+| `git-commit` | ship | 单次提交 |
+| `git-commit-push-pr` | ship | 提交 + 推送 + 开 PR |
 | `ce-compound` | ship (post-hook) | 知识沉淀 |
 
 ### 行为纪律（superpowers）
@@ -369,7 +411,8 @@ Step 4: 验证 (= review 子集)
 | `systematic-debugging` | #3 根因先于修复 | 禁止"试试看"式修复 |
 | `verification-before-completion` | #4 证据先于断言 | 跑命令才能说通过 |
 | `receiving-code-review` | #5 验证先于采纳 | 审查反馈先验证再实现 |
-| `using-git-worktrees` | #6 工作区先于工作 | 强制 worktree 隔离 |
+| `using-git-worktrees` | #6 隔离推荐 | worktree 隔离（推荐） |
+| `simplify` | code (post) | 复用/质量/效率清理 |
 | `dispatching-parallel-agents` | -- | 多独立任务并行 |
 | `brainstorming` | #1 设计先于实现 | 需求探索纪律 |
 
@@ -379,9 +422,10 @@ Step 4: 验证 (= review 子集)
 
 ```
 brainstorm          plan              code            review          ship
-需求文档 ---------> 实施计划 -------> 代码变更 -----> PASS/FAIL ----> PR/merge
+需求文档 ---------> 实施计划 -------> 代码变更 -----> PASS/FAIL ----> PR
 R1,R2,R3            Impl Units        staged diff     safe_auto fix   |
-                    Test Scenarios                     gated 裁决      |
+CONTEXT.md          架构深度分析                      gated 裁决      |
+ADR (条件)          Test Scenarios                    depth review    |
                                                                       v
                                                                  [post-hook]
                                                                  ce-compound
@@ -389,4 +433,24 @@ R1,R2,R3            Impl Units        staged diff     safe_auto fix   |
 plan (ce-plan) <-- learnings 自动搜索 --------------------------------+
 ```
 
-R-ID 从 brainstorm 贯穿到 review。知识从 ship 回流到 plan。
+R-ID 从 brainstorm 贯穿到 review。知识从 ship 回流到 plan。领域语言从 brainstorm 贯穿到所有阶段（通过 CONTEXT.md）。
+
+---
+
+## 设计决策记录
+
+本文档反映的实现决策（与初始设计的差异）：
+
+| 决策 | 理由 |
+|------|------|
+| 不改名现有 skill（git-commit 等保持原名） | 避免 breaking change，文档用逻辑角色名 |
+| ce-flow 与 lfg/slfg 共存 | 定位不同：智能路由 vs 全自动流水线 |
+| 不建 ce-simplify-code | superpowers 的 simplify 已覆盖 |
+| Worktree 推荐但不强制 | 小任务摩擦感太重 |
+| 产物检测 + 用户确认 | 避免误判已有文档的相关性 |
+| ce-work 完成后统一 review，不分批 | autofix 处理的 safe_auto 问题不因晚发现而变难 |
+| Ship 只走 PR 路径 | 直接 push main 风险高，不提供快捷方式 |
+| 按需 rebase（非强制） | main 没变化时 rebase 无意义 |
+| Bug 意图用 LLM 判断，非关键词匹配 | "fix the typo" 不是 bug |
+| ce-debug 信任子 skill 内部机制 | 避免两层控制冲突 |
+| ce-compound 自动触发 | 知识沉淀不应依赖人记得去做 |
