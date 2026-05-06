@@ -174,6 +174,43 @@ When creating a new doc, preserve the section order from `assets/resolution-temp
 
 After writing the new learning, decide whether this new solution is evidence that older docs should be refreshed.
 
+#### Spec Promotion Check
+
+Before evaluating refresh candidates, assess whether this learning should be **promoted to a project-level convention**. A solution doc records "what happened and how we fixed it." A convention says "from now on, always do X." Promotion is the bridge.
+
+**Promote when ALL of these are true:**
+
+1. The learning reveals a pattern that will recur (not a one-off incident)
+2. The fix establishes a team-level convention (not just a personal preference)
+3. Future agents should know this BEFORE encountering the problem (proactive, not reactive)
+
+**Do NOT promote when:**
+
+- The learning is specific to one incident and unlikely to recur
+- The convention is already documented elsewhere
+- The guidance is too narrow to be a general rule
+
+**If promotion is warranted:**
+
+1. Identify the target file:
+   - `CONTEXT.md` — if the learning clarifies domain terminology or resolves a naming ambiguity
+   - `AGENTS.md` (or `CLAUDE.md` if that's the substantive file) — if the learning establishes a coding convention, workflow rule, or architectural constraint
+   - `docs/adr/` — if the learning records an architectural decision meeting the three-condition gate (hard to reverse + surprising without context + real trade-off)
+
+2. Draft the smallest addition that captures the convention. Match the target file's existing style and density.
+
+3. Present the proposed addition to the user with rationale. Use the platform's blocking question tool when available. Only write after consent.
+
+**Examples of promotable learnings:**
+
+- "We discovered that mocking the database in integration tests hides migration bugs" → Add to AGENTS.md: "Integration tests must hit a real database, not mocks"
+- "The term 'account' was ambiguous — it means Organization in billing context" → Add to CONTEXT.md
+- "We chose Postgres over Redis for session storage because of compliance requirements" → Add to docs/adr/
+
+#### Refresh Evaluation
+
+#### Refresh Evaluation
+
 `ce:compound-refresh` is **not** a default follow-up. Use it selectively when the new learning suggests an older learning or pattern doc may now be inaccurate.
 
 It makes sense to invoke `ce:compound-refresh` when one or more of these are true:
