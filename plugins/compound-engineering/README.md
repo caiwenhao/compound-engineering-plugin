@@ -18,11 +18,13 @@ The primary entry points for engineering work, invoked as slash commands:
 
 | Skill | Description |
 |-------|-------------|
+| `/ce:flow` | Intelligent workflow orchestrator — detects state, classifies intent, routes to correct phase |
 | `/ce:ideate` | Discover high-impact project improvements through divergent ideation and adversarial filtering |
 | `/ce:brainstorm` | Explore requirements and approaches before planning |
 | `/ce:plan` | Transform features into structured implementation plans grounded in repo patterns, with automatic confidence checking |
-| `/ce:review` | Structured code review with tiered persona agents, confidence gating, and dedup pipeline |
 | `/ce:work` | Execute work items systematically |
+| `/ce:review` | Structured code review with tiered persona agents, confidence gating, and dedup pipeline |
+| `/ce:debug` | Bug fix orchestrator — reproduce, root-cause, fix, verify |
 | `/ce:compound` | Document solved problems to compound team knowledge |
 | `/ce:compound-refresh` | Refresh stale or drifting learnings and decide whether to keep, update, replace, or archive them |
 

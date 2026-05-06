@@ -268,6 +268,18 @@ Determine how to proceed based on what was provided in `<input_document>`.
    - Create new tasks if scope expands
    - Keep user informed of major milestones
 
+### Phase 2.5: Post-Implementation Cleanup
+
+After all implementation units are complete (Phase 2 done), run these two steps sequentially before moving to quality checks:
+
+1. **Code Simplification** — Load the `simplify` skill (or equivalent) to review all changed files for reuse opportunities, quality issues, and efficiency improvements. This catches cross-unit duplication that individual units could not see.
+
+2. **Automated Code Review** — Invoke `ce:review mode:autofix` (pass `plan:<path>` if a plan file was used). This applies safe automatic fixes (formatting, naming, simple refactors) without user interaction. Residual findings that require judgment are left for Phase 3.
+
+Both steps are mandatory for non-trivial work. Skip only for trivial changes (typo, config, single-line fix).
+
+---
+
 ### Phase 3: Quality Check
 
 1. **Run Core Quality Checks**
