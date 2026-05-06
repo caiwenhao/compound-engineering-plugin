@@ -74,7 +74,7 @@ describe("writeCodexBundle", () => {
     expect(await exists(path.join(codexRoot, "skills", "skill-one", "SKILL.md"))).toBe(true)
   })
 
-  test("backs up existing config.toml before overwriting", async () => {
+  test("preserves existing config.toml content while updating MCP config", async () => {
     const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "codex-backup-"))
     const codexRoot = path.join(tempRoot, ".codex")
     const configPath = path.join(codexRoot, "config.toml")
@@ -93,8 +93,11 @@ describe("writeCodexBundle", () => {
 
     await writeCodexBundle(codexRoot, bundle)
 
-    // New config should be written
+    // Existing config should be preserved alongside updated MCP config
     const newConfig = await fs.readFile(configPath, "utf8")
+    expect(newConfig).toContain("# My original config")
+    expect(newConfig).toContain("[custom]")
+    expect(newConfig).toContain("key = \"value\"")
     expect(newConfig).toContain("[mcp_servers.test]")
 
     // Backup should exist with original content
@@ -104,6 +107,43 @@ describe("writeCodexBundle", () => {
 
     const backupContent = await fs.readFile(path.join(codexRoot, backupFileName!), "utf8")
     expect(backupContent).toBe(originalContent)
+  })
+
+  test("replaces the managed MCP block on reinstall instead of appending duplicates", async () => {
+    const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "codex-reinstall-"))
+    const codexRoot = path.join(tempRoot, ".codex")
+    const configPath = path.join(codexRoot, "config.toml")
+
+    await fs.mkdir(codexRoot, { recursive: true })
+    await fs.writeFile(
+      configPath,
+      [
+        "[custom]",
+        "enabled = true",
+        "",
+        "# BEGIN compound-plugin Codex MCP",
+        "[mcp_servers.old]",
+        "command = \"old\"",
+        "# END compound-plugin Codex MCP",
+        "",
+      ].join("\n"),
+    )
+
+    const bundle: CodexBundle = {
+      prompts: [],
+      skillDirs: [],
+      generatedSkills: [],
+      mcpServers: { test: { command: "echo" } },
+    }
+
+    await writeCodexBundle(codexRoot, bundle)
+
+    const content = await fs.readFile(configPath, "utf8")
+    expect(content).toContain("[custom]")
+    expect(content).toContain("[mcp_servers.test]")
+    expect(content).not.toContain("[mcp_servers.old]")
+    expect(content.match(/# BEGIN compound-plugin Codex MCP/g)?.length).toBe(1)
+    expect(content.match(/# END compound-plugin Codex MCP/g)?.length).toBe(1)
   })
 
   test("transforms copied SKILL.md files using Codex invocation targets", async () => {
