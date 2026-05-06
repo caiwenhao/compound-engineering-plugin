@@ -160,6 +160,7 @@ Determine how to proceed based on what was provided in `<input_document>`.
      - Run System-Wide Test Check (see below)
      - Run tests after changes
      - Assess testing coverage: did this task change behavior? If yes, were tests written or updated? If no tests were added, is the justification deliberate (e.g., pure config, no behavioral change)?
+     - Pivot Detection Check (see below)
      - Mark task as completed
      - Evaluate for incremental commit (see below)
    ```
@@ -196,6 +197,22 @@ Determine how to proceed based on what was provided in `<input_document>`.
    **When to skip:** Leaf-node changes with no callbacks, no state persistence, no parallel interfaces. If the change is purely additive (new helper method, new view partial), the check takes 10 seconds and the answer is "nothing fires, skip."
 
    **When this matters most:** Any change that touches models with callbacks, error handling with fallback/retry, or functionality exposed through multiple interfaces.
+
+   **Pivot Detection Check** — After implementing each unit (before marking complete), verify alignment with the plan:
+
+   | Check | Signal |
+   |-------|--------|
+   | Does the implementation align with the plan's stated requirements (R-IDs)? | If a requirement cannot be satisfied as specified, this is a pivot signal |
+   | Did any assumption from the plan prove false during implementation? | External API missing expected capability, library incompatibility, data model mismatch |
+   | Does the implementation require changes that violate the plan's scope boundaries? | Touching files or systems explicitly excluded from scope |
+
+   If a mismatch is detected:
+   - STOP implementation immediately — do not continue to the next unit
+   - Report to the caller (ce-flow or user): "Pivot detected: [Unit name] implementation contradicts [R-ID / assumption / scope boundary]. Reason: [explanation]."
+   - Do not attempt to fix the mismatch autonomously — this is a planning-level decision
+   - The caller (ce-flow) handles pivot routing via its Pivot Protocol
+
+   **When to skip:** Trivial tasks, bare-prompt execution (no plan), or tasks with no R-ID traceability.
 
 
 2. **Incremental Commits**

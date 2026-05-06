@@ -121,6 +121,8 @@ brainstorm 过程中同步维护领域知识：
 ```
 用户输入
     |
+    +-- 知识检索（无条件）: learnings-researcher 搜索相关历史
+    |
     +-- 无方向 -----------> ce-ideate (排名创意) -> ce-brainstorm
     +-- 模糊想法 ---------> ce-brainstorm (Standard/Deep, grill 风格)
     +-- 明确小需求 -------> ce-brainstorm (Lightweight)
@@ -191,6 +193,57 @@ Implementation Unit 必须是端到端垂直切片，不是单层水平切片。
 错误: Unit 1 所有 model / Unit 2 所有 controller / Unit 3 所有 view
 正确: Unit 1 用户注册(全栈) / Unit 2 用户登录(全栈) / Unit 3 密码重置(全栈)
 ```
+
+---
+
+## Phase 2.5: Spike Validation (Conditional) -- "能不能"
+
+> 在投入完整实现前，用最小代码验证高风险假设。
+>
+> 执行者：`ce-flow` 直接处理（不委托子 skill）
+>
+> 核心产出：假设验证结果（VERIFIED / FALSIFIED）+ plan Risk table 更新
+
+### 触发条件（任一）
+
+- Plan 的 Risk table 或 Implementation Unit 中包含 `Spike Assumptions` 字段
+- `document-review` 的 feasibility-reviewer 在 plan 审查时标记了未验证的外部依赖假设
+
+### 跳过条件
+
+- Plan 中无 spike 假设
+- 所有外部依赖在代码库中已有使用先例（已证明可行）
+
+### 执行
+
+```
+spike 假设列表
+    |
+    v
+对每个假设:
+    写最小验证代码到 .context/compound-engineering/spike/<assumption-slug>/
+    运行验证（import check / API call / build step / integration test）
+    记录结果: VERIFIED 或 FALSIFIED
+    |
+    v
+删除 .context/compound-engineering/spike/ 目录（throwaway）
+更新 plan Risk table 中的验证状态
+```
+
+### 失败路由
+
+| 情况 | 路由 |
+|------|------|
+| FALSIFIED 假设影响核心需求（R-ID） | 停下，回到 brainstorm 修订需求或寻找替代方案 |
+| FALSIFIED 假设只影响实现路径（非核心 R-ID） | 回到 plan 局部修订受影响 Unit 的方案 |
+
+局部修订后仅跑 feasibility-reviewer 审查修订部分（不跑完整 document-review）。
+
+### 设计原则
+
+- Spike 代码是 throwaway，不保留、不演化为生产代码
+- Spike 验证的知识记录在 plan Risk table 中，代码本身不需要留
+- Spike 应最小化——只验证"能不能"，不解决"怎么写好"
 
 ---
 
@@ -266,6 +319,43 @@ ce-review interactive (多轮循环最多 3 轮)
 safe_auto 自动修复 -> gated_auto/manual 交用户裁决
 ```
 
+### Review -> Rework Protocol
+
+当 ce-review 返回 NEEDS_WORK 时，进入 rework 循环：
+
+```
+NEEDS_WORK + finding list
+    |
+    v
+展示 findings，用户可 reject 个别 finding
+    |
+    v
+确定 TDD 纪律（按 autofix_class）:
+    gated_auto + correctness/security -> TDD 强制（写失败测试 -> 修复）
+    其他（maintainability/style）     -> 直接修复，跑现有测试
+    |
+    v
+内联修复 findings（ce-flow 处理，不委托 ce-work）
+    |
+    v
+重新 ce-review，计数 round
+    |
+    v
+3 轮后仍 NEEDS_WORK -> 升级
+    |
+    +-- Accept risk: 带已知问题继续 ship（记录到 PR description）
+    +-- Split PR: 按 Implementation Unit 拆分，进入增量交付路径
+    +-- Abandon: 放弃变更，不提交
+```
+
+**Rework 范围**：ce-review 输出的 finding list 自动界定 rework scope。用户可在 rework 开始前 reject 个别 finding（误报或故意设计），被 reject 的 finding 不计入 rework。
+
+**TDD 降级规则**：
+- `gated_auto` + 类别为 correctness 或 security → 强制 TDD（写失败测试证明 finding，再修复使其通过）
+- 所有其他 finding（maintainability、style、performance）→ 直接修复，修复后跑现有测试确认无破坏
+
+**3 轮升级**：finding 在 3 轮修复后仍未收敛，停下展示剩余 finding 和三个选项。这是典型的"需要用户决策"场景。
+
 ### Phase 3 vs Phase 4 的 review 区别
 
 | | Phase 3 (code 内嵌) | Phase 4 (完整) |
@@ -338,6 +428,7 @@ Step 1: 构建反馈循环 (ce-debug)
     |
     v
 Step 2: 根因定位 (systematic-debugging skill)
+    知识检索: learnings-researcher 搜索同类 bug 历史解法
     假设驱动，逐一证伪
     [DEBUG-xxxx] 标签化所有调试日志
     产出: 定位到具体代码行 + 因果链
@@ -357,6 +448,104 @@ Step 4: 验证
     v
 -> ship (用户触发)
 ```
+
+---
+
+## 增量交付路径 (Conditional)
+
+> 大特性按 Unit 分批交付，降低 PR 体积和 review 风险。
+>
+> 执行者：`ce-flow` 编排
+>
+> 默认行为：单 PR。增量交付是例外路径。
+
+### 激活条件（任一）
+
+- Plan 中存在独立 Implementation Unit（无依赖链）且总 diff 预计 >300 行
+- Review 3 轮升级时用户选择 "Split PR"
+
+### 机制：Sequential PRs
+
+```
+对每个独立 Unit（或 Unit 组）:
+  1. Code (ce-work 单 Unit 范围)
+  2. Review (ce-review)
+  3. Ship (git-commit-push-pr -> merge)
+  4. Sync: git pull fresh main
+  |
+  v
+下一个 Unit 从新 main 开始
+```
+
+### 排序规则
+
+- 无未交付依赖的 Unit 优先 ship
+- 所有剩余 Unit 都有依赖时，按依赖顺序 ship
+
+### 状态跟踪
+
+ce-flow 在会话上下文中跟踪：
+- `shipped_units: [Unit 1, Unit 3]`
+- `remaining_units: [Unit 2, Unit 4]`
+
+会话中断时，resume detection 通过 git history（已合入 main 的 PR）重建状态。
+
+---
+
+## Pivot Protocol (Cross-Cutting)
+
+> 实现过程中发现需求偏差时的回退协议。
+>
+> 触发点：Phase 3 (Code)
+>
+> 核心原则：**Agent 检测 + 用户确认**。
+
+### 检测信号
+
+- Implementation Unit 的实现与需求（R-ID）矛盾
+- Plan 中的假设在编码时被证伪
+- 实现需要的变更违反 plan 的 scope boundary
+
+### 流程
+
+```
+ce-work 检测到偏差
+    |
+    v
+STOP 实现，报告用户:
+"Unit [X] 的实现与需求 [R-ID] 矛盾: [解释]"
+    |
+    v
+用户确认 pivot? (可能是误报)
+    |
+    +-- "继续原计划" -> 恢复实现
+    +-- "确认 pivot" -> 进入影响评估
+                            |
+                            v
+                    评估影响范围:
+                    - 哪些 R-ID 受影响
+                    - Unit -> R-ID 映射：未关联变更 R-ID 的 Unit 保留
+                    - 依赖链检查：保留的 Unit 是否间接依赖受影响 Unit
+                            |
+                            v
+                    路由:
+                    +-- 局部修订（需求仍有效，只是实现路径变了）
+                    |   回到 plan 修订受影响 Unit
+                    |   feasibility-reviewer 审查修订部分
+                    |   恢复 code 阶段
+                    |
+                    +-- 重大方向变更（需求本身需要修订）
+                        回到 brainstorm
+                        完整 document-review
+                        完整 pipeline 重启
+```
+
+### 已完成 Unit 处理
+
+按 R-ID 追溯判断：
+- Unit 关联的 R-ID 均未受影响 → 保留（已提交的代码不动）
+- Unit 关联的 R-ID 受影响 → 需要重新评估
+- 保留的 Unit 依赖受影响 Unit 的产出 → 也需要修订
 
 ---
 
@@ -391,15 +580,15 @@ Step 4: 验证
 
 | Skill | 阶段 | 角色 |
 |---|---|---|
-| `ce-flow` | 入口 | 智能编排器，状态检测 + 意图路由 |
+| `ce-flow` | 入口 | 智能编排器，状态检测 + 意图路由 + rework/spike/pivot/增量交付协议 |
 | `ce-init` | 初始化 | 为项目生成 AGENTS.md + CLAUDE.md |
-| `ce-brainstorm` | brainstorm | 需求定义（grill 风格 + 术语沉淀） |
+| `ce-brainstorm` | brainstorm | 需求定义（grill 风格 + 术语沉淀 + learnings 检索） |
 | `ce-ideate` | brainstorm | 创意发散 |
 | `document-review` | brainstorm, plan | 文档多人格审查 |
-| `ce-plan` | plan | 计划创建（含架构深度分析） |
-| `ce-work` | code | 执行 Implementation Units + post-cleanup + Coding Discipline |
+| `ce-plan` | plan | 计划创建（含架构深度分析 + spike 假设标记） |
+| `ce-work` | code | 执行 Implementation Units + post-cleanup + Coding Discipline + pivot 检测 |
 | `ce-review` | code (autofix), review | 多角色代码审查（含 architecture-depth-reviewer） |
-| `ce-debug` | bug fix | 编排器：反馈循环 -> 根因 -> 修复 -> 验证 |
+| `ce-debug` | bug fix | 编排器：反馈循环 -> learnings 检索 -> 根因 -> 修复 -> 验证 |
 | `git-commit` | ship | 单次提交 |
 | `git-commit-push-pr` | ship | 提交 + 推送 + 开 PR |
 | `ce-compound` | ship (post-hook) | 知识沉淀 + 规范回流 |
@@ -422,19 +611,25 @@ Step 4: 验证
 ## 文档追溯链
 
 ```
-brainstorm          plan              code            review          ship
-需求文档 ---------> 实施计划 -------> 代码变更 -----> PASS/FAIL ----> PR
-R1,R2,R3            Impl Units        staged diff     safe_auto fix   |
-CONTEXT.md          架构深度分析                      gated 裁决      |
-ADR (条件)          Test Scenarios                    depth review    |
-                                                                      v
-                                                                 [post-hook]
-                                                                 ce-compound
-                                                                      |
-plan (ce-plan) <-- learnings 自动搜索 --------------------------------+
+brainstorm          plan           spike          code            review          ship
+需求文档 ---------> 实施计划 ----> 假设验证 ----> 代码变更 -----> PASS/FAIL ----> PR
+R1,R2,R3            Impl Units     VERIFIED/      staged diff     safe_auto fix   |
+CONTEXT.md          架构深度分析   FALSIFIED                      gated 裁决      |
+ADR (条件)          Spike假设                                     rework loop     |
+                    Test Scenarios                                (max 3 rounds)  |
+                         ^                                             |          v
+                         |                              NEEDS_WORK ----+     [post-hook]
+                         |                              (内联修复)            ce-compound
+                         |                                                        |
+                         |    pivot (需求偏差)                                     |
+                         +<------------- ce-work 检测 + 用户确认                  |
+                         |                                                        |
+plan (ce-plan) <-- learnings 自动搜索 ------------------------------------------>+
+brainstorm     <-- learnings 自动搜索 ------------------------------------------>+
+ce-debug       <-- learnings 自动搜索 ------------------------------------------>+
 ```
 
-R-ID 从 brainstorm 贯穿到 review。知识从 ship 回流到 plan。领域语言从 brainstorm 贯穿到所有阶段（通过 CONTEXT.md）。
+R-ID 从 brainstorm 贯穿到 review。知识从 ship 回流到 plan、brainstorm、debug。领域语言从 brainstorm 贯穿到所有阶段（通过 CONTEXT.md）。Spike 验证假设在 plan 和 code 之间。Pivot 从 code 回流到 plan 或 brainstorm。Rework 在 review 和 code 之间循环。
 
 ---
 
@@ -455,3 +650,10 @@ R-ID 从 brainstorm 贯穿到 review。知识从 ship 回流到 plan。领域语
 | Bug 意图用 LLM 判断，非关键词匹配 | "fix the typo" 不是 bug |
 | ce-debug 信任子 skill 内部机制 | 避免两层控制冲突 |
 | ce-compound 自动触发 | 知识沉淀不应依赖人记得去做 |
+| Rework 由 ce-flow 内联处理，不委托 ce-work | 短循环修复，不需要完整计划驱动执行 |
+| Spike 由 ce-flow 直接处理，不建子 skill | 简单 3 步序列，子 skill 增加无价值间接层 |
+| 增量交付状态在会话上下文中跟踪 | 单会话内完成，resume detection 已处理重入 |
+| Rework TDD 按 autofix_class 降级 | 纯重构类 finding 不存在有意义的 RED 状态 |
+| Pivot 需用户确认才执行 | Agent 可能误判，pivot 决策权在用户 |
+| 已完成 Unit 按 R-ID 追溯保留 | 精确且有据可查，避免不必要的全量回滚 |
+| 增量交付用 Sequential PRs | Stacked PRs 工具链不成熟，并行分支复杂度爆炸 |

@@ -131,6 +131,41 @@ After `ce:debug` completes (fix verified), proceed to Ship Phase.
 
 ---
 
+### Stage 2.5: Spike Validation (Conditional)
+
+**Skip conditions:**
+- Plan contains no spike assumptions
+- All external dependencies already have proven usage in the codebase
+
+**Trigger:** The plan document contains a `Spike Assumptions` section in its Risk table, OR `document-review` feasibility-reviewer flagged unverified external dependency assumptions.
+
+**Execute:**
+
+For each spike assumption in the plan:
+
+1. Write minimal verification code in `.context/compound-engineering/spike/<assumption-slug>/`
+2. Run the verification (import check, API call, build step, integration test — whatever proves or disproves the assumption)
+3. Record result: VERIFIED or FALSIFIED
+
+**After verification:**
+
+- Delete the entire `.context/compound-engineering/spike/` directory
+- Update the plan's Risk table with verification status for each assumption
+
+**Failure routing:**
+
+- FALSIFIED assumption affects a core requirement (R-ID referenced in the assumption's "Affects" column):
+  > "Spike failed: [assumption]. This affects requirement [R-ID]. The requirement may need revision or an alternative approach. Recommend returning to brainstorm."
+  
+  Return to Stage 1 (Brainstorm) with pivot context.
+
+- FALSIFIED assumption affects only the implementation path (Unit-level, not R-ID-level):
+  > "Spike failed: [assumption]. This affects [Unit name]'s approach but not the core requirements. Revising the plan."
+  
+  Return to Stage 2 (Plan) for local revision of the affected Unit. After revision, run feasibility-reviewer only on the revised section, then re-enter Stage 2.5 for any new spike assumptions.
+
+---
+
 ### Stage 3: Code
 
 **Execute:** Load the `ce:work` skill, passing the plan document path (or requirements doc, or bare prompt if earlier stages were skipped).
@@ -150,7 +185,37 @@ After `ce:debug` completes (fix verified), proceed to Ship Phase.
 
 This is the full interactive review — it surfaces findings that need user judgment (gated_auto, manual items) beyond what autofix already handled in Stage 3.
 
-**Gate:** Review returns PASS. If NEEDS_WORK, address findings and re-review (max 3 rounds).
+**Gate:** Review returns PASS or NEEDS_WORK.
+
+- If PASS: proceed to Stage 5.
+- If NEEDS_WORK: enter the Rework Protocol below.
+
+#### Rework Protocol
+
+When `ce:review` returns NEEDS_WORK with a finding list:
+
+1. **Present findings to user.** Show the finding list grouped by severity. Ask if any findings should be rejected (false positives or intentional design choices). Use the platform's blocking question tool (`AskUserQuestion` in Claude Code, `request_user_input` in Codex, `ask_user` in Gemini).
+
+2. **Determine TDD discipline per finding:**
+   - `gated_auto` + category is correctness or security → TDD forced: write a failing test that demonstrates the finding, then fix to make it pass
+   - All other findings (maintainability, style, performance) → fix directly, run existing test suite after all fixes applied
+
+3. **Fix findings inline.** Fix each accepted finding in the current checkout. Do not delegate to `ce:work` — this is a targeted fix loop, not plan-driven implementation.
+
+4. **Re-review.** Invoke `ce:review` again on the updated diff. Increment round counter.
+
+5. **3-round escalation.** If NEEDS_WORK persists after 3 rounds, stop and present options:
+
+   > "Review has not converged after 3 rounds. Remaining findings: [list]. Options:"
+   > 1. Accept risk — merge with remaining findings documented in PR description
+   > 2. Split PR — ship completed Units independently (enters Incremental Delivery Path)
+   > 3. Abandon — discard changes, do not commit
+
+   Use the platform's blocking question tool for this decision.
+
+   - Accept risk: proceed to Stage 5 with findings noted in PR body as "Known Issues"
+   - Split PR: enter Incremental Delivery Path (see below)
+   - Abandon: stop, inform user, do not commit
 
 ---
 
@@ -173,6 +238,73 @@ This is the full interactive review — it surfaces findings that need user judg
 **Execute:** Load the `git-commit-push-pr` skill to commit, push, and open a PR.
 
 **Post-ship:** Automatically load the `ce:compound` skill to evaluate whether this work produced knowledge worth documenting. The skill internally decides whether to record anything or skip.
+
+---
+
+### Incremental Delivery Path
+
+**Activation criteria** (any of):
+- Plan has independent Implementation Units (no dependency chain between them) AND total expected diff >300 lines — detected at Stage 3 entry
+- User chose "Split PR" from the 3-round rework escalation in Stage 4
+
+**Default:** Single PR for all Units. Incremental delivery is the exception.
+
+**Mechanism — Sequential PRs:**
+
+When activated, execute each independent Unit (or Unit group) through the full pipeline:
+
+1. Code — load `ce:work` with single Unit scope
+2. Review — load `ce:review` in interactive mode
+3. Ship — load `git-commit-push-pr` to commit, push, and merge
+4. Sync — pull fresh main before starting next Unit
+
+**Ordering:** Ship Units with no unshipped dependencies first. If all remaining Units depend on unshipped Units, ship in dependency order.
+
+**State tracking:** Maintain in conversation context:
+- `shipped_units: [Unit 1, Unit 3]`
+- `remaining_units: [Unit 2, Unit 4]`
+
+If the session breaks mid-delivery, resume detection (Phase 3) reconstructs state from git history — merged PRs on main that reference the plan document.
+
+**Post-ship hook:** Run `ce:compound` once after the final Unit ships (not after each Unit).
+
+---
+
+### Pivot Protocol
+
+Can be triggered from Stage 3 (Code) when `ce:work` reports a requirements mismatch.
+
+**Detection:** `ce:work` emits a pivot signal when implementation contradicts a requirement (R-ID), a plan assumption proves false, or changes would violate scope boundaries. ce-flow receives this signal and handles routing.
+
+**When pivot signal received:**
+
+1. **Present to user:**
+   > "ce:work detected a mismatch: [explanation]. This may indicate the requirements or plan need revision. Confirm pivot, or continue as planned?"
+
+   Use the platform's blocking question tool.
+
+2. **If user says "continue as planned":** Resume Stage 3 (false alarm).
+
+3. **If user confirms pivot:**
+
+   a. **Assess impact:**
+      - Identify which R-IDs are affected
+      - Check Unit → R-ID mapping in the plan: Units linked only to unaffected R-IDs are preserved
+      - Check dependency chain: if a preserved Unit depends on an affected Unit's output, it must also be revised
+
+   b. **Route by scope:**
+   
+   - **Local revision** (requirements still valid, only implementation path changes):
+     - Return to Stage 2 (Plan) for targeted revision of affected Units
+     - Run feasibility-reviewer only on revised sections
+     - Resume from Stage 2.5 (spike if new assumptions) or Stage 3 (code)
+   
+   - **Major direction change** (requirements themselves need revision):
+     - Return to Stage 1 (Brainstorm) with pivot context
+     - Full document-review after brainstorm revision
+     - Full pipeline restart from revised requirements
+
+   c. **Preserved work:** Completed Units whose R-IDs are unaffected remain committed. Only affected Units are reworked.
 
 ---
 

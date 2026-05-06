@@ -86,6 +86,19 @@ The goal is a higher reproduction rate, not a clean repro. Loop the trigger 100x
 
 **Goal:** Identify the exact code location and causal chain that produces the bug.
 
+**Pre-step — Search institutional knowledge:**
+
+Before loading systematic-debugging, dispatch the learnings-researcher to check for known issues in the affected area:
+
+- Task `compound-engineering:research:learnings-researcher`(bug description + affected module/component)
+
+If relevant learnings are found:
+- Surface them: "Found a documented solution that may be related: [title]. Key insight: [insight]."
+- Use the learnings to inform hypothesis generation in systematic-debugging (pass as context to narrow the search space)
+- If a past solution directly matches the current symptoms, verify it applies before proceeding with full root-cause analysis
+
+If no relevant learnings are found, proceed to systematic-debugging without delay.
+
 **How:** Load the `systematic-debugging` skill (superpowers). It enforces:
 - Hypothesis-driven investigation (not trial-and-error)
 - Evidence collection before conclusions

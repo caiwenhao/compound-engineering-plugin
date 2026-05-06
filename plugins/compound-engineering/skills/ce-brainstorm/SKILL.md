@@ -87,6 +87,23 @@ If the scope is unclear, ask one targeted question to disambiguate and then proc
 
 #### 1.1 Existing Context Scan
 
+**Learnings Search (Unconditional):**
+
+Before any substantive brainstorming, dispatch the learnings-researcher to surface relevant institutional knowledge:
+
+- Task `compound-engineering:research:learnings-researcher`(feature description from user input)
+
+This runs unconditionally regardless of scope classification (Lightweight, Standard, Deep). The search is cheap and prevents re-discovering known solutions or repeating documented mistakes.
+
+If the learnings search returns relevant results:
+- Surface them to the user: "Found relevant past learnings: [brief summary]. These may inform our approach."
+- Factor them into the Product Pressure Test (Phase 1.2) and Collaborative Dialogue (Phase 1.3)
+- If a past solution directly solves the user's request, say so — the brainstorm may be unnecessary
+
+If no relevant learnings are found, proceed silently (do not announce the absence).
+
+**Repo Scan:**
+
 Scan the repo before substantive brainstorming. Match depth to scope:
 
 **Lightweight** — Search for the topic, check if something similar already exists, and move on.

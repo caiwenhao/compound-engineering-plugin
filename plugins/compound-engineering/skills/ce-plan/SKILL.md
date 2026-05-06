@@ -507,6 +507,8 @@ deepened: YYYY-MM-DD  # optional, set when the confidence check substantively st
 
 **Dependencies:** [None / Unit 1 / external prerequisite]
 
+**Spike assumptions:** [None / list assumptions this unit depends on that need spike validation before implementation]
+
 **Files:**
 - Create: `path/to/new_file`
 - Modify: `path/to/existing_file`
@@ -543,6 +545,21 @@ deepened: YYYY-MM-DD  # optional, set when the confidence check substantively st
 | Risk | Mitigation |
 |------|------------|
 | [Meaningful risk] | [How it is addressed or accepted] |
+
+### Spike Assumptions (Conditional)
+
+Include this subsection when the plan depends on unverified external feasibility assumptions that need code execution to prove. These trigger spike validation in ce-flow (Stage 2.5) before coding begins.
+
+| Assumption | Affects | Verification Method |
+|-----------|---------|-------------------|
+| [External API supports X capability] | [R-ID or Unit name] | [How to verify: API call, import test, build check] |
+
+Only include assumptions that:
+- Involve external dependencies not yet proven in this codebase
+- Would require a fundamentally different approach if false
+- Cannot be verified by reading documentation alone (need code execution)
+
+Do not include assumptions verifiable from docs, existing codebase patterns, or common knowledge.
 
 ## Documentation / Operational Notes
 
