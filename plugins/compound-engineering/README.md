@@ -19,6 +19,7 @@ The primary entry points for engineering work, invoked as slash commands:
 | Skill | Description |
 |-------|-------------|
 | `/ce:flow` | Intelligent workflow orchestrator — detects state, classifies intent, routes to correct phase |
+| `/ce:init` | Initialize a project with AI-agent-facing AGENTS.md by scanning tech stack and conventions |
 | `/ce:ideate` | Discover high-impact project improvements through divergent ideation and adversarial filtering |
 | `/ce:brainstorm` | Explore requirements and approaches before planning |
 | `/ce:plan` | Transform features into structured implementation plans grounded in repo patterns, with automatic confidence checking |

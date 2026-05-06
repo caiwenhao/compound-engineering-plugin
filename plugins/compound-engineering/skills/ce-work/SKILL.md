@@ -446,6 +446,48 @@ Most plans should use subagent dispatch from standard mode. Agent teams add sign
 - Don't leave features 80% done
 - A finished feature that ships beats a perfect feature that doesn't
 
+## Coding Discipline
+
+These constraints apply throughout Phase 2 execution. Violating them is the primary source of wasted work.
+
+### Think Before Coding
+
+- State assumptions explicitly before implementing. If uncertain, ask.
+- If multiple interpretations exist, present them — do not pick silently.
+- If a simpler approach exists, say so. Push back when warranted.
+- If something is unclear, stop. Name what's confusing. Ask.
+
+### Simplicity First
+
+- No features beyond what was asked.
+- No abstractions for single-use code.
+- No "flexibility" or "configurability" that was not requested.
+- No error handling for impossible scenarios.
+- If 200 lines could be 50, rewrite it.
+
+The test: would a senior engineer say this is overcomplicated? If yes, simplify.
+
+### Surgical Changes
+
+- Do not "improve" adjacent code, comments, or formatting.
+- Do not refactor things that are not broken.
+- Match existing style, even if you would do it differently.
+- If you notice unrelated dead code, mention it — do not delete it.
+- Remove imports/variables/functions that YOUR changes made unused.
+- Do not remove pre-existing dead code unless asked.
+
+The test: every changed line should trace directly to the task at hand.
+
+### Goal-Driven Execution
+
+Transform tasks into verifiable goals before implementing:
+
+- "Add validation" -> "Write tests for invalid inputs, then make them pass"
+- "Fix the bug" -> "Write a test that reproduces it, then make it pass"
+- "Refactor X" -> "Ensure tests pass before and after"
+
+Strong success criteria enable independent looping. Weak criteria ("make it work") require constant clarification.
+
 ## Quality Checklist
 
 Before creating PR, verify:
