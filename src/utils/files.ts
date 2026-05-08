@@ -86,6 +86,43 @@ export function sanitizePathName(name: string): string {
 }
 
 /**
+ * Validate that a manifest-supplied relative path is safe to join against a
+ * managed root before deleting or moving anything at that location.
+ *
+ * Install manifests (`install-manifest.json`) are read back from disk during
+ * reinstall/cleanup and fed into `fs.rm`/`fs.rename`. An attacker or a
+ * corrupted file could include entries like `../../config.toml` or
+ * `/etc/passwd` that would cause the cleanup to operate outside the intended
+ * managed tree. This helper rejects:
+ *
+ *   - non-string values
+ *   - empty strings
+ *   - absolute paths (POSIX `/foo`, Windows `C:\foo`)
+ *   - any `..` path segment (including `foo/../bar`)
+ *   - paths that, when joined with `rootDir`, resolve outside `rootDir`
+ *
+ * The `rootDir` check is defense-in-depth against edge cases the first two
+ * checks miss (e.g. platform-specific separators or encoded traversal the
+ * split-based check didn't catch).
+ */
+export function isSafeManagedPath(rootDir: string, candidate: unknown): candidate is string {
+  if (typeof candidate !== "string" || candidate.length === 0) return false
+  if (path.isAbsolute(candidate)) return false
+  // Reject any traversal segment (`..`) split on either separator so the
+  // check is uniform across platforms.
+  const segments = candidate.split(/[\\/]/)
+  if (segments.some((segment) => segment === "..")) return false
+  // Final containment check: the fully-resolved candidate must stay inside
+  // the resolved root. This catches anything the above two checks missed.
+  const resolvedRoot = path.resolve(rootDir)
+  const resolvedCandidate = path.resolve(resolvedRoot, candidate)
+  if (resolvedCandidate !== resolvedRoot && !resolvedCandidate.startsWith(resolvedRoot + path.sep)) {
+    return false
+  }
+  return true
+}
+
+/**
  * Resolve a colon-separated command name into a filesystem path.
  * e.g. resolveCommandPath("/commands", "ce:plan", ".md") -> "/commands/ce/plan.md"
  * Creates intermediate directories as needed.
@@ -116,14 +153,20 @@ export async function copyDir(sourceDir: string, targetDir: string): Promise<voi
 }
 
 /**
- * Copy a skill directory, optionally transforming SKILL.md content.
- * All other files are copied verbatim. Used by target writers to apply
+ * Copy a skill directory, optionally transforming markdown content.
+ * Non-markdown files are copied verbatim. Used by target writers to apply
  * platform-specific content transforms to pass-through skills.
+ *
+ * By default only SKILL.md is transformed (safe for slash-command rewrites
+ * that shouldn't touch reference files). Set `transformAllMarkdown` to also
+ * transform reference .md files — needed when the transform rewrites content
+ * that appears in reference files (e.g. fully-qualified agent names).
  */
 export async function copySkillDir(
   sourceDir: string,
   targetDir: string,
   transformSkillContent?: (content: string) => string,
+  transformAllMarkdown?: boolean,
 ): Promise<void> {
   await ensureDir(targetDir)
   const entries = await fs.readdir(sourceDir, { withFileTypes: true })
@@ -133,9 +176,12 @@ export async function copySkillDir(
     const targetPath = path.join(targetDir, entry.name)
 
     if (entry.isDirectory()) {
-      await copySkillDir(sourcePath, targetPath, transformSkillContent)
+      await copySkillDir(sourcePath, targetPath, transformSkillContent, transformAllMarkdown)
     } else if (entry.isFile()) {
-      if (entry.name === "SKILL.md" && transformSkillContent) {
+      const shouldTransform = transformSkillContent && (
+        entry.name === "SKILL.md" || (transformAllMarkdown && entry.name.endsWith(".md"))
+      )
+      if (shouldTransform) {
         const content = await readText(sourcePath)
         await writeText(targetPath, transformSkillContent(content))
       } else {

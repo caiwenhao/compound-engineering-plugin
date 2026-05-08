@@ -1,5 +1,5 @@
 import { formatFrontmatter } from "../utils/frontmatter"
-import type { ClaudeAgent, ClaudeCommand, ClaudePlugin } from "../types/claude"
+import { type ClaudeAgent, type ClaudeCommand, type ClaudePlugin, filterSkillsByPlatform } from "../types/claude"
 import type { DroidBundle, DroidCommandFile, DroidAgentFile } from "../types/droid"
 import type { ClaudeToOpenCodeOptions } from "./claude-to-opencode"
 
@@ -45,12 +45,12 @@ export function convertClaudeToDroid(
 ): DroidBundle {
   const commands = plugin.commands.map((command) => convertCommand(command))
   const droids = plugin.agents.map((agent) => convertAgent(agent))
-  const skillDirs = plugin.skills.map((skill) => ({
+  const skillDirs = filterSkillsByPlatform(plugin.skills, "droid").map((skill) => ({
     name: skill.name,
     sourceDir: skill.sourceDir,
   }))
 
-  return { commands, droids, skillDirs }
+  return { pluginName: plugin.manifest.name, commands, droids, skillDirs }
 }
 
 function convertCommand(command: ClaudeCommand): DroidCommandFile {

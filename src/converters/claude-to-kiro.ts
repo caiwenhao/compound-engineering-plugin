@@ -1,7 +1,7 @@
 import { readFileSync, existsSync } from "fs"
 import path from "path"
 import { formatFrontmatter } from "../utils/frontmatter"
-import type { ClaudeAgent, ClaudeCommand, ClaudeMcpServer, ClaudePlugin } from "../types/claude"
+import { type ClaudeAgent, type ClaudeCommand, type ClaudeMcpServer, type ClaudePlugin, filterSkillsByPlatform } from "../types/claude"
 import type {
   KiroAgent,
   KiroAgentConfig,
@@ -36,7 +36,7 @@ export function convertClaudeToKiro(
   const usedSkillNames = new Set<string>()
 
   // Pass-through skills are processed first — they're the source of truth
-  const skillDirs = plugin.skills.map((skill) => ({
+  const skillDirs = filterSkillsByPlatform(plugin.skills, "kiro").map((skill) => ({
     name: skill.name,
     sourceDir: skill.sourceDir,
   }))
@@ -66,7 +66,7 @@ export function convertClaudeToKiro(
     )
   }
 
-  return { agents, generatedSkills, skillDirs, steeringFiles, mcpServers }
+  return { pluginName: plugin.manifest.name, agents, generatedSkills, skillDirs, steeringFiles, mcpServers }
 }
 
 function convertAgentToKiroAgent(agent: ClaudeAgent, knownAgentNames: string[]): KiroAgent {

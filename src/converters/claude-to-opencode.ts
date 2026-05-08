@@ -1,11 +1,12 @@
 import { formatFrontmatter } from "../utils/frontmatter"
 import { normalizeModelWithProvider } from "../utils/model"
-import type {
-  ClaudeAgent,
-  ClaudeCommand,
-  ClaudeHooks,
-  ClaudePlugin,
-  ClaudeMcpServer,
+import {
+  type ClaudeAgent,
+  type ClaudeCommand,
+  type ClaudeHooks,
+  type ClaudePlugin,
+  type ClaudeMcpServer,
+  filterSkillsByPlatform,
 } from "../types/claude"
 import type {
   OpenCodeBundle,
@@ -20,6 +21,24 @@ export type ClaudeToOpenCodeOptions = {
   agentMode: "primary" | "subagent"
   inferTemperature: boolean
   permissions: PermissionMode
+  /**
+   * Codex-only option. Ignored by other targets.
+   *
+   * When false (default), `convertClaudeToCodex` emits only agent conversions.
+   * Skills and commands are expected to install via Codex's native plugin flow
+   * (`codex plugin install`), which the Bun converter complements rather than
+   * duplicates. Without this setting, running both native install and the Bun
+   * converter registers skills twice — once from the native plugin manifest,
+   * once from the converter output — creating conflicts.
+   *
+   * When true, the converter emits skills (copied as-is), commands (as prompts
+   * and generated skills), and agents together. Use when installing without
+   * Codex native plugin install (legacy / standalone flow).
+   *
+   * Obsolete once Codex's native plugin spec supports custom agents; at that
+   * point the entire `--to codex` converter path is expected to be deprecated.
+   */
+  codexIncludeSkills?: boolean
 }
 
 const TOOL_MAP: Record<string, string> = {
@@ -79,11 +98,12 @@ export function convertClaudeToOpenCode(
   applyPermissions(config, plugin.commands, options.permissions)
 
   return {
+    pluginName: plugin.manifest.name,
     config,
     agents: agentFiles,
     commandFiles: cmdFiles,
     plugins,
-    skillDirs: plugin.skills.map((skill) => ({ sourceDir: skill.sourceDir, name: skill.name })),
+    skillDirs: filterSkillsByPlatform(plugin.skills, "opencode").map((skill) => ({ sourceDir: skill.sourceDir, name: skill.name })),
   }
 }
 
@@ -93,7 +113,11 @@ function convertAgent(agent: ClaudeAgent, options: ClaudeToOpenCodeOptions) {
     mode: options.agentMode,
   }
 
-  if (agent.model && agent.model !== "inherit") {
+  // Only write model for primary agents. Subagents inherit from the parent
+  // session, making them provider-agnostic. Writing an explicit model like
+  // "anthropic/claude-haiku-4-5" on a subagent causes ProviderModelNotFoundError
+  // when the user's OpenCode env uses a different provider. See #477.
+  if (agent.model && agent.model !== "inherit" && options.agentMode === "primary") {
     frontmatter.model = normalizeModelWithProvider(agent.model)
   }
 
@@ -261,6 +285,39 @@ function rewriteClaudePaths(body: string): string {
     .replace(/\.claude\//g, ".opencode/")
 }
 
+/**
+ * Transform skill/agent content for OpenCode compatibility.
+ * Composes path rewriting with fully-qualified agent name flattening.
+ *
+ * OpenCode resolves agents by flat filename, so fully-qualified agent
+ * references must be flattened. Both 3-segment legacy refs
+ * (`compound-engineering:document-review:coherence-reviewer` -> `coherence-reviewer`)
+ * and 2-segment category-qualified refs (`review:ce-correctness-reviewer` ->
+ * `ce-correctness-reviewer`) are handled. 2-segment skill references without
+ * `ce-` prefix (e.g. `compound-engineering:document-review`) are left unchanged.
+ * See #477.
+ */
+export function transformSkillContentForOpenCode(body: string): string {
+  let result = rewriteClaudePaths(body)
+  // Rewrite 3-segment FQ agent refs: plugin:category:agent-name -> agent-name.
+  // Boundary assertions prevent partial matching on 4+ segment names
+  // (e.g. `a:b:c:d` would otherwise produce `c:d` or `a:d`).
+  // The `/` in the lookbehind prevents rewriting slash commands like
+  // `/team:ops:deploy` — agent names are never preceded by `/`.
+  result = result.replace(
+    /(?<![a-z0-9:/-])[a-z][a-z0-9-]*:[a-z][a-z0-9-]*:([a-z][a-z0-9-]*)(?![a-z0-9:-])/g,
+    "$1",
+  )
+  // Rewrite 2-segment category-qualified agent refs: category:ce-agent -> ce-agent.
+  // Only matches when the agent segment starts with `ce-` to avoid false positives
+  // on slash commands or other colon-separated patterns.
+  result = result.replace(
+    /(?<![a-z0-9:/-])[a-z][a-z0-9-]*:(ce-[a-z][a-z0-9-]*)(?![a-z0-9:-])/g,
+    "$1",
+  )
+  return result
+}
+
 function inferTemperature(agent: ClaudeAgent): number | undefined {
   const sample = `${agent.name} ${agent.description ?? ""}`.toLowerCase()
   if (/(review|audit|security|sentinel|oracle|lint|verification|guardian)/.test(sample)) {
@@ -322,12 +379,7 @@ function applyPermissions(
     }
   }
 
-  const permission: Record<string, "allow" | "deny"> = {}
-  const tools: Record<string, boolean> = {}
-
-  for (const tool of sourceTools) {
-    tools[tool] = mode === "broad" ? true : enabled.has(tool)
-  }
+  const permission: Record<string, "allow" | "deny" | Record<string, "allow" | "deny">> = {}
 
   if (mode === "broad") {
     for (const tool of sourceTools) {
@@ -341,7 +393,7 @@ function applyPermissions(
         for (const pattern of toolPatterns) {
           patternPermission[pattern] = "allow"
         }
-        ;(permission as Record<string, typeof patternPermission>)[tool] = patternPermission
+        ;(permission)[tool] = patternPermission
       } else {
         permission[tool] = enabled.has(tool) ? "allow" : "deny"
       }
@@ -355,7 +407,7 @@ function applyPermissions(
       for (const pattern of toolPatterns) {
         patternPermission[pattern] = "allow"
       }
-      ;(permission as Record<string, typeof patternPermission>)[tool] = patternPermission
+      ;(permission)[tool] = patternPermission
     }
   }
 
@@ -371,12 +423,11 @@ function applyPermissions(
     for (const pattern of combined) {
       combinedPermission[pattern] = "allow"
     }
-    ;(permission as Record<string, typeof combinedPermission>).edit = combinedPermission
-    ;(permission as Record<string, typeof combinedPermission>).write = combinedPermission
+    ;(permission).edit = combinedPermission
+    ;(permission).write = combinedPermission
   }
 
   config.permission = permission
-  config.tools = tools
 }
 
 function normalizeTool(raw: string): string | null {
