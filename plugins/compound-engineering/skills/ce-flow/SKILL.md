@@ -43,11 +43,29 @@ Then scan for existing artifacts:
 
 ## Phase 1: Workspace Check
 
-If on the default branch (main/master) and the task is non-trivial:
+This phase is a **pre-document gate**. Run it before writing any requirements document, plan document, spike artifact, or code change.
 
-> "You're on the default branch. I'd recommend creating a feature branch or worktree for this work. Want me to set one up, or continue here?"
+Resolve the default branch:
 
-Proceed on user's choice. Do not block on this.
+```bash
+git rev-parse --abbrev-ref origin/HEAD 2>/dev/null || gh repo view --json defaultBranchRef --jq '.defaultBranchRef.name' 2>/dev/null || echo main
+```
+
+If on the default branch (`main`, `master`, or the resolved default branch) and the task is non-trivial, stop before creating documents and ask:
+
+> "You're on the default branch. Before I create requirements or plan documents, choose a workspace:
+> 1. Create a feature branch here
+> 2. Create a worktree
+> 3. Continue on the default branch"
+
+Use the platform's blocking question tool for this decision. In Codex, use `request_user_input` when available; otherwise present the numbered list and wait for the user's reply. In Claude Code, use `AskUserQuestion` after loading its schema if needed.
+
+Routing:
+- **Feature branch:** derive a short branch name from the task, create it with `git checkout -b <branch-name>`, then re-run `git branch --show-current`.
+- **Worktree:** load `ce-worktree` and create a worktree for the task. Continue the flow from the worktree checkout.
+- **Continue on default branch:** require explicit user confirmation. Record that the user accepted default-branch risk, then continue.
+
+Do not proceed to Brainstorm, Plan, or Resume Detection document writes until this gate is resolved.
 
 ---
 
@@ -101,6 +119,27 @@ After `ce-debug` completes (fix verified), proceed to Ship Phase.
 
 ## Standard Pipeline
 
+### Document Review Gates
+
+Requirements and plan documents are reviewed before the workflow advances into implementation.
+
+**Execute:** Load `ce-doc-review mode:headless <document-path>`.
+
+**Gate:** Classify the returned findings:
+- If only `safe_auto` fixes were applied, re-read the document, summarize the applied fixes, and continue.
+- If `gated_auto`, `manual`, or high-impact FYI findings are returned, present them grouped by severity and ask the user which findings to accept, defer to Open Questions, or reject as intentional.
+- Apply accepted findings directly to the document. Use the existing document structure; do not rewrite the artifact wholesale unless the accepted findings require it.
+- Re-run `ce-doc-review mode:headless <document-path>` after edits. Continue until the review returns no blocking findings, or until 3 review rounds have completed.
+
+**3-round escalation:** If blocking findings remain after 3 rounds, stop and present options:
+1. Accept risk and continue to the next stage with remaining findings noted
+2. Return to the previous stage for deeper rework
+3. Stop the flow
+
+Use the platform's blocking question tool for decisions. In Codex, use `request_user_input` when available; otherwise present a numbered list and wait for the user's reply. In Claude Code, use `AskUserQuestion` after loading its schema if needed.
+
+---
+
 ### Stage 1: Brainstorm
 
 **Skip conditions:**
@@ -110,9 +149,38 @@ After `ce-debug` completes (fix verified), proceed to Ship Phase.
 
 **Execute:** Load the `ce-brainstorm` skill with the user's input.
 
-**Gate:** Brainstorm produces a requirements document. Confirm its path and proceed.
+**Gate:** Brainstorm produces a requirements document. Run the Document Review Gate on the requirements document before proceeding to Stage 2. Do not enter planning while blocking requirements-review findings remain unresolved unless the user explicitly accepts that risk.
 
 **State:** Record requirements document path.
+
+---
+
+### Stage 1.5: Prototype (Conditional)
+
+**Purpose:** Align on user experience before technical planning when the requirements describe a UI surface.
+
+**Trigger:** Run this stage when the reviewed requirements document mentions user-visible frontend work, including any of:
+- Pages, screens, dashboards, admin panels, forms, modals, navigation, settings, visual states, responsive behavior, or accessibility
+- User flows that depend on UI interaction
+- New or changed frontend components
+
+**Skip conditions:**
+- User explicitly says "skip prototype" or "no prototype"
+- Requirements are backend/API/CLI/data-only
+- Existing Figma/design spec is already authoritative and current
+- The task is a small UI copy/style tweak where a prototype would add ceremony
+
+**Execute:**
+1. Create a prototype directory under `docs/prototypes/<yyyy-mm-dd>-<short-slug>/`.
+2. Load `ce-frontend-design` with the reviewed requirements document and instruct it to produce a standalone HTML prototype at `docs/prototypes/<yyyy-mm-dd>-<short-slug>/index.html`. The prototype is a planning artifact, not production implementation.
+3. Use existing design-system signals from the target repo when available. For greenfield UI, use the frontend-design workflow's visual thesis, content plan, interaction plan, and visual verification.
+
+**Gate:** Present the prototype path and ask whether it is approved for planning:
+- **Approved:** Record the prototype path and pass it into Stage 2 with the requirements document.
+- **Needs changes:** Apply targeted prototype revisions, then re-present. Cap at 3 prototype rounds before asking whether to continue iterating, proceed with known gaps, or skip the prototype.
+- **Rejected / wrong direction:** Return to Stage 1 with the feedback, revise requirements, then re-run requirements Document Review Gate.
+
+**State:** Record prototype path when approved.
 
 ---
 
@@ -123,9 +191,9 @@ After `ce-debug` completes (fix verified), proceed to Ship Phase.
 - The task is trivial enough that `ce-work` can handle it from a bare prompt
 - User explicitly says "skip planning, just code it"
 
-**Execute:** Load the `ce-plan` skill, passing the requirements document path as input.
+**Execute:** Load the `ce-plan` skill, passing the requirements document path as input. If Stage 1.5 produced an approved prototype, also pass the prototype path as UX context for planning.
 
-**Gate:** Plan produces a plan document. Confirm its path and proceed.
+**Gate:** Plan produces a plan document. Run the Document Review Gate on the plan document before proceeding to Stage 2.5 or Stage 3. Do not enter coding while blocking plan-review findings remain unresolved unless the user explicitly accepts that risk.
 
 **State:** Record plan document path.
 
@@ -173,7 +241,7 @@ For each spike assumption in the plan:
 `ce-work` handles:
 - Implementation of all units
 - Post-implementation simplification (simplify skill)
-- Automated code review (ce-review mode:autofix)
+- Automated code review (`ce-review mode:autofix`) after implementation
 
 **Gate:** `ce-work` completes all units and passes its internal quality checks.
 
@@ -235,7 +303,7 @@ When `ce-review` returns NEEDS_WORK with a finding list:
    ```
    If conflicts arise, stop and help the user resolve them before continuing.
 
-**Execute:** Load the `git-commit-push-pr` skill to commit, push, and open a PR.
+**Execute:** Load the `ce-ship` skill to run final checks, commit, push, open or update a PR, and evaluate learning capture.
 
 **Post-ship:** Automatically load the `ce-compound` skill to evaluate whether this work produced knowledge worth documenting. The skill internally decides whether to record anything or skip.
 
@@ -255,7 +323,7 @@ When activated, execute each independent Unit (or Unit group) through the full p
 
 1. Code — load `ce-work` with single Unit scope
 2. Review — load `ce-review` in interactive mode
-3. Ship — load `git-commit-push-pr` to commit, push, and merge
+3. Ship — load `ce-ship` to run final checks, commit, push, and open or update a PR
 4. Sync — pull fresh main before starting next Unit
 
 **Ordering:** Ship Units with no unshipped dependencies first. If all remaining Units depend on unshipped Units, ship in dependency order.
@@ -326,6 +394,9 @@ Can be triggered from Stage 3 (Code) when `ce-work` reports a requirements misma
 | Bug fix intent detected | Skip brainstorm + plan, use Bug Fix Fast Path |
 | Requirements doc exists and confirmed | Skip brainstorm |
 | Plan doc exists and confirmed | Skip plan |
+| Requirements doc exists but has not been reviewed in this flow | Run requirements Document Review Gate before planning |
+| Reviewed requirements describe UI work and no approved prototype exists | Run Prototype stage before planning |
+| Plan doc exists but has not been reviewed in this flow | Run plan Document Review Gate before coding |
 | Trivial change (typo, config, single-line) | Skip brainstorm + plan, go direct to code |
 | User explicitly requests a specific stage | Jump to that stage |
 
@@ -338,5 +409,5 @@ Can be triggered from Stage 3 (Code) when `ce-work` reports a requirements misma
 3. **Root cause before fix** — no fix without understanding why it's broken
 4. **Evidence before assertion** — no "it works" without running the command
 5. **Verify before adopting** — review feedback is verified, not blindly applied
-6. **Workspace isolation recommended** — feature branches at minimum
+6. **Workspace isolation gated before documents** — feature branch or worktree before requirements/plan writes unless the user explicitly accepts default-branch risk
 7. **Ship is user-triggered** — flow does not commit/push without explicit authorization

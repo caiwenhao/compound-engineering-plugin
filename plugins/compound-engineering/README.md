@@ -23,7 +23,7 @@ The primary entry points for engineering work, invoked as slash commands. Detail
 
 | Skill | Description |
 |-------|-------------|
-| `/ce-flow` | Intelligent workflow orchestrator — detects state, classifies intent, routes to correct phase |
+| `/ce-flow` | Intelligent workflow orchestrator — gates workspace setup, reviews docs, prototypes UI work, and routes to the correct phase |
 | `/ce-init` | Initialize a project with AI-agent-facing AGENTS.md by scanning tech stack and conventions |
 | `/ce-ideate` | Discover high-impact project improvements through divergent ideation and adversarial filtering |
 | `/ce-brainstorm` | Explore requirements and approaches before planning |
@@ -41,6 +41,7 @@ The primary entry points for engineering work, invoked as slash commands. Detail
 | [`ce-clean-gone-branches`](../../docs/skills/ce-clean-gone-branches.md) | Clean up local branches whose remote tracking branch is gone |
 | [`ce-commit`](../../docs/skills/ce-commit.md) | Create a git commit with a value-communicating message |
 | [`ce-commit-push-pr`](../../docs/skills/ce-commit-push-pr.md) | Commit, push, and open a PR with an adaptive description; also update an existing PR description, or generate a description on its own without committing |
+| [`ce-ship`](../../docs/skills/ce-ship.md) | Run final checks, then hand off to commit, push, PR, and learning capture |
 | [`ce-worktree`](../../docs/skills/ce-worktree.md) | Manage Git worktrees for parallel development |
 
 ### Workflow Utilities
