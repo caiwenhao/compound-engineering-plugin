@@ -275,7 +275,7 @@ Before evaluating refresh candidates, assess whether this learning should be **p
 
 #### Refresh Evaluation
 
-`ce:compound-refresh` is **not** a default follow-up. Use it selectively when the new learning suggests an older learning or pattern doc may now be inaccurate.
+`ce-compound-refresh` is **not** a default follow-up. Use it selectively when the new learning suggests an older learning or pattern doc may now be inaccurate.
 
 It makes sense to invoke `ce-compound-refresh` when one or more of these are true:
 

@@ -268,7 +268,7 @@ When requirements span multiple distinct concerns, group them under bold topic h
 When the work is simple, combine sections rather than padding them. A short requirements document is better than a bloated one.
 
 Before finalizing, check:
-- What would `ce:plan` still have to invent if this brainstorm ended now?
+- What would `ce-plan` still have to invent if this brainstorm ended now?
 - Do any requirements depend on something claimed to be out of scope?
 - Are any unresolved items actually product decisions rather than planning questions?
 - Did implementation details leak in when they shouldn't have?

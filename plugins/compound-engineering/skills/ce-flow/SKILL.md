@@ -1,5 +1,5 @@
 ---
-name: ce:flow
+name: ce-flow
 description: 'Intelligent workflow orchestrator. Single entry point that detects current state, classifies intent, and routes to the correct phase (brainstorm -> plan -> code -> review -> ship). Also handles bug fix fast path. Use when starting any development task, resuming interrupted work, or when unsure which phase to enter.'
 argument-hint: "[feature description, bug report, or blank to auto-detect]"
 ---
@@ -89,13 +89,13 @@ Wait for confirmation before proceeding. Do not silently assume these artifacts 
 
 ## Bug Fix Fast Path
 
-Route to the `ce:debug` skill with the user's bug description:
+Route to the `ce-debug` skill with the user's bug description:
 
 ```
-ce:debug <user_input>
+ce-debug <user_input>
 ```
 
-After `ce:debug` completes (fix verified), proceed to Ship Phase.
+After `ce-debug` completes (fix verified), proceed to Ship Phase.
 
 ---
 
@@ -108,7 +108,7 @@ After `ce:debug` completes (fix verified), proceed to Ship Phase.
 - A requirements document already exists and user confirms it's current
 - The task is clearly trivial (single-file config change, typo fix)
 
-**Execute:** Load the `ce:brainstorm` skill with the user's input.
+**Execute:** Load the `ce-brainstorm` skill with the user's input.
 
 **Gate:** Brainstorm produces a requirements document. Confirm its path and proceed.
 
@@ -120,10 +120,10 @@ After `ce:debug` completes (fix verified), proceed to Ship Phase.
 
 **Skip conditions:**
 - A plan document already exists and user confirms it's current
-- The task is trivial enough that `ce:work` can handle it from a bare prompt
+- The task is trivial enough that `ce-work` can handle it from a bare prompt
 - User explicitly says "skip planning, just code it"
 
-**Execute:** Load the `ce:plan` skill, passing the requirements document path as input.
+**Execute:** Load the `ce-plan` skill, passing the requirements document path as input.
 
 **Gate:** Plan produces a plan document. Confirm its path and proceed.
 
@@ -168,12 +168,12 @@ For each spike assumption in the plan:
 
 ### Stage 3: Code
 
-**Execute:** Load the `ce:work` skill, passing the plan document path (or requirements doc, or bare prompt if earlier stages were skipped).
+**Execute:** Load the `ce-work` skill, passing the plan document path (or requirements doc, or bare prompt if earlier stages were skipped).
 
 `ce-work` handles:
 - Implementation of all units
 - Post-implementation simplification (simplify skill)
-- Automated code review (ce:review mode:autofix)
+- Automated code review (ce-review mode:autofix)
 
 **Gate:** `ce-work` completes all units and passes its internal quality checks.
 
@@ -181,7 +181,7 @@ For each spike assumption in the plan:
 
 ### Stage 4: Review
 
-**Execute:** Load the `ce:review` skill in interactive mode. Pass `plan:<path>` if a plan exists.
+**Execute:** Load the `ce-review` skill in interactive mode. Pass `plan:<path>` if a plan exists.
 
 This is the full interactive review — it surfaces findings that need user judgment (gated_auto, manual items) beyond what autofix already handled in Stage 3.
 
@@ -192,7 +192,7 @@ This is the full interactive review — it surfaces findings that need user judg
 
 #### Rework Protocol
 
-When `ce:review` returns NEEDS_WORK with a finding list:
+When `ce-review` returns NEEDS_WORK with a finding list:
 
 1. **Present findings to user.** Show the finding list grouped by severity. Ask if any findings should be rejected (false positives or intentional design choices). Use the platform's blocking question tool (`AskUserQuestion` in Claude Code, `request_user_input` in Codex, `ask_user` in Gemini).
 
@@ -200,9 +200,9 @@ When `ce:review` returns NEEDS_WORK with a finding list:
    - `gated_auto` + category is correctness or security → TDD forced: write a failing test that demonstrates the finding, then fix to make it pass
    - All other findings (maintainability, style, performance) → fix directly, run existing test suite after all fixes applied
 
-3. **Fix findings inline.** Fix each accepted finding in the current checkout. Do not delegate to `ce:work` — this is a targeted fix loop, not plan-driven implementation.
+3. **Fix findings inline.** Fix each accepted finding in the current checkout. Do not delegate to `ce-work` — this is a targeted fix loop, not plan-driven implementation.
 
-4. **Re-review.** Invoke `ce:review` again on the updated diff. Increment round counter.
+4. **Re-review.** Invoke `ce-review` again on the updated diff. Increment round counter.
 
 5. **3-round escalation.** If NEEDS_WORK persists after 3 rounds, stop and present options:
 
@@ -237,7 +237,7 @@ When `ce:review` returns NEEDS_WORK with a finding list:
 
 **Execute:** Load the `git-commit-push-pr` skill to commit, push, and open a PR.
 
-**Post-ship:** Automatically load the `ce:compound` skill to evaluate whether this work produced knowledge worth documenting. The skill internally decides whether to record anything or skip.
+**Post-ship:** Automatically load the `ce-compound` skill to evaluate whether this work produced knowledge worth documenting. The skill internally decides whether to record anything or skip.
 
 ---
 
@@ -253,8 +253,8 @@ When `ce:review` returns NEEDS_WORK with a finding list:
 
 When activated, execute each independent Unit (or Unit group) through the full pipeline:
 
-1. Code — load `ce:work` with single Unit scope
-2. Review — load `ce:review` in interactive mode
+1. Code — load `ce-work` with single Unit scope
+2. Review — load `ce-review` in interactive mode
 3. Ship — load `git-commit-push-pr` to commit, push, and merge
 4. Sync — pull fresh main before starting next Unit
 
@@ -266,20 +266,20 @@ When activated, execute each independent Unit (or Unit group) through the full p
 
 If the session breaks mid-delivery, resume detection (Phase 3) reconstructs state from git history — merged PRs on main that reference the plan document.
 
-**Post-ship hook:** Run `ce:compound` once after the final Unit ships (not after each Unit).
+**Post-ship hook:** Run `ce-compound` once after the final Unit ships (not after each Unit).
 
 ---
 
 ### Pivot Protocol
 
-Can be triggered from Stage 3 (Code) when `ce:work` reports a requirements mismatch.
+Can be triggered from Stage 3 (Code) when `ce-work` reports a requirements mismatch.
 
-**Detection:** `ce:work` emits a pivot signal when implementation contradicts a requirement (R-ID), a plan assumption proves false, or changes would violate scope boundaries. ce-flow receives this signal and handles routing.
+**Detection:** `ce-work` emits a pivot signal when implementation contradicts a requirement (R-ID), a plan assumption proves false, or changes would violate scope boundaries. ce-flow receives this signal and handles routing.
 
 **When pivot signal received:**
 
 1. **Present to user:**
-   > "ce:work detected a mismatch: [explanation]. This may indicate the requirements or plan need revision. Confirm pivot, or continue as planned?"
+   > "ce-work detected a mismatch: [explanation]. This may indicate the requirements or plan need revision. Confirm pivot, or continue as planned?"
 
    Use the platform's blocking question tool.
 

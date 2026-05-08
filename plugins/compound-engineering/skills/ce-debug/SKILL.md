@@ -1,5 +1,5 @@
 ---
-name: ce:debug
+name: ce-debug
 description: 'Bug fix orchestrator: reproduce, root-cause, fix, verify. Use when the user reports a bug, describes unexpected behavior, references an error or crash, or says "debug this", "fix this bug", "why is this broken". Routes through reproduce-bug, systematic-debugging, ce-work, and ce-review in sequence.'
 argument-hint: "[bug description, error message, or GitHub issue URL]"
 ---
@@ -146,7 +146,7 @@ Trust the skill's internal loop and stopping conditions. If it returns without a
 1. Run the reproduction test — must pass
 2. Run the full test suite — no new failures
 3. **Remove all `[DEBUG-xxxx]` instrumentation** — grep for the tag prefix and delete every tagged line
-4. Invoke `ce:review mode:autofix` on the changes — apply safe fixes, surface anything concerning
+4. Invoke `ce-review mode:autofix` on the changes — apply safe fixes, surface anything concerning
 
 **Gate:** If the test suite has new failures, return to Step 3. If `ce-review` surfaces serious concerns, address them before proceeding.
 

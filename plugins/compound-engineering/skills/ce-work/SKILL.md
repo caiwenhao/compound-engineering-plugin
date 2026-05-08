@@ -342,7 +342,7 @@ After all implementation units are complete (Phase 2 done), run these two steps 
 
 1. **Code Simplification** — Load the `simplify` skill (or equivalent) to review all changed files for reuse opportunities, quality issues, and efficiency improvements. This catches cross-unit duplication that individual units could not see.
 
-2. **Automated Code Review** — Invoke `ce:review mode:autofix` (pass `plan:<path>` if a plan file was used). This applies safe automatic fixes (formatting, naming, simple refactors) without user interaction. Residual findings that require judgment are left for Phase 3.
+2. **Automated Code Review** — Invoke `ce-review mode:autofix` (pass `plan:<path>` if a plan file was used). This applies safe automatic fixes (formatting, naming, simple refactors) without user interaction. Residual findings that require judgment are left for Phase 3.
 
 Both steps are mandatory for non-trivial work. Skip only for trivial changes (typo, config, single-line fix).
 
@@ -453,7 +453,7 @@ Before creating PR, verify:
 - [ ] Before/after screenshots captured and uploaded (for UI changes)
 - [ ] Commit messages follow conventional format
 - [ ] PR description includes Post-Deploy Monitoring & Validation section (or explicit no-impact rationale)
-- [ ] Code review completed (inline self-review or full `ce:review`)
+- [ ] Code review completed (inline self-review or full `ce-review`)
 - [ ] PR description includes summary, testing notes, and screenshots
 - [ ] PR description includes Compound Engineered badge with accurate model and harness
 
@@ -461,7 +461,7 @@ Before creating PR, verify:
 
 Every change gets reviewed. The tier determines depth, not whether review happens.
 
-**Tier 2 (full review)** — REQUIRED default. Invoke `ce:review mode:autofix` with `plan:<path>` when available. Safe fixes are applied automatically; residual work surfaces as todos. Always use this tier unless all four Tier 1 criteria are explicitly confirmed.
+**Tier 2 (full review)** — REQUIRED default. Invoke `ce-review mode:autofix` with `plan:<path>` when available. Safe fixes are applied automatically; residual work surfaces as todos. Always use this tier unless all four Tier 1 criteria are explicitly confirmed.
 
 **Tier 1 (inline self-review)** — permitted only when all four are true (state each explicitly before choosing):
 - Purely additive (new files only, no existing behavior modified)
