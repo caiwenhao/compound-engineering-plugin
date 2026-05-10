@@ -1,6 +1,6 @@
 ---
 name: ce-ship
-description: Ship completed work by running final checks, then committing, pushing, opening or updating a PR, and evaluating whether to capture a learning. Use when the user says "ship", "ship this", "finish and PR", "open the PR after review", or wants the standalone Ship stage from ce-flow.
+description: Ship completed work by running final checks, committing, pushing, opening or updating a PR, merging it, closing related issues, cleaning up branches/worktrees, and capturing learnings. Use when the user says "ship", "ship this", "finish and PR", "open the PR after review", or wants the standalone Ship stage from ce-flow.
 argument-hint: "[optional shipping context, PR focus, or blank for current branch]"
 ---
 
@@ -8,7 +8,7 @@ argument-hint: "[optional shipping context, PR focus, or blank for current branc
 
 Standalone Ship stage for the compound-engineering workflow.
 
-Use this when code work and review are done and the user wants to move from the current branch to a committed, pushed PR. This skill is a thin orchestration layer: it performs final safety checks, then delegates commit/push/PR mechanics to `ce-commit-push-pr` and learning capture to `ce-compound`.
+Use this when code work and review are done and the user wants to complete the full delivery: from current branch to merged PR with cleanup. This skill orchestrates the entire shipping pipeline: final checks, commit/push/PR creation, merge, issue closure, workspace cleanup, and learning capture.
 
 ## Input
 
@@ -76,9 +76,106 @@ Load `ce-commit-push-pr` with the shipping context. It owns:
 
 Do not duplicate that logic here.
 
-### Step 5: Learning Capture
+### Step 5: Merge PR
 
-After `ce-commit-push-pr` completes successfully, load `ce-compound` to evaluate whether this work produced knowledge worth documenting. The skill decides whether to record anything or skip.
+Attempt to merge the PR immediately using squash merge:
+
+```bash
+gh pr merge --squash --auto=false
+```
+
+**On success:** Continue to Step 6.
+
+**On failure:** Stop and provide detailed error report including:
+- The raw error output from `gh pr merge`
+- Possible causes (CI not passing, missing required approvals, branch protection rules, merge conflicts)
+- Suggested next steps for the user
+
+Do not retry or wait for conditions to change. The user must resolve blockers manually.
+
+### Step 6: Close Related Issues
+
+Extract issue references from the PR description that was created in Step 4. Look for patterns like:
+- `Closes #123`
+- `Fixes #456`
+- `Resolves #789`
+
+For each referenced issue, close it:
+
+```bash
+gh issue close <issue-number>
+```
+
+If issue closure fails, log the error but continue to Step 7. Issue closure is not critical enough to block cleanup.
+
+### Step 7: Cleanup Workspace
+
+Detect the current workspace type and clean up appropriately.
+
+**Detect worktree:**
+
+```bash
+git rev-parse --git-common-dir
+```
+
+If the output ends with `.git/worktrees/<name>`, the current directory is a worktree.
+
+**If in a worktree:**
+
+1. Get the worktree path and main repo path:
+   ```bash
+   WORKTREE_PATH=$(git rev-parse --show-toplevel)
+   COMMON_DIR=$(git rev-parse --git-common-dir)
+   MAIN_REPO=$(dirname "$COMMON_DIR")
+   ```
+
+2. Switch to the main repo:
+   ```bash
+   cd "$MAIN_REPO"
+   ```
+
+3. Remove the worktree:
+   ```bash
+   git worktree remove "$WORKTREE_PATH"
+   ```
+
+4. Continue to main sync below.
+
+**If on a feature branch (not worktree):**
+
+1. Get the current branch name:
+   ```bash
+   FEATURE_BRANCH=$(git branch --show-current)
+   ```
+
+2. Switch to main:
+   ```bash
+   git checkout main
+   ```
+
+3. Delete the local feature branch:
+   ```bash
+   git branch -D "$FEATURE_BRANCH"
+   ```
+
+4. Delete the remote feature branch:
+   ```bash
+   git push origin --delete "$FEATURE_BRANCH"
+   ```
+
+**Sync main:**
+
+After cleanup, ensure local main is up to date:
+
+```bash
+git pull
+```
+
+If any cleanup step fails, report the error with details but do not attempt to roll back previous steps (merge, issue closure). The user can manually clean up remaining artifacts.
+
+### Step 8: Learning Capture
+
+After successful merge and cleanup, load `ce-compound` to evaluate whether this work produced knowledge worth documenting. The skill decides whether to record anything or skip.
 
 ## Stop Conditions
 
@@ -89,4 +186,15 @@ Stop before shipping if:
 - Rebase conflicts occur
 - Required credentials or remotes are unavailable
 - The user declines any required confirmation from `ce-commit-push-pr`
+
+Stop after PR creation if:
+
+- PR merge fails (CI not passing, missing approvals, merge conflicts, insufficient permissions)
+  - Provide detailed error report with raw output, possible causes, and suggested next steps
+  - Do not retry or wait for conditions to change
+
+Continue despite non-critical failures:
+
+- Issue closure fails (log error but continue to cleanup)
+- Cleanup steps fail (report error but do not roll back merge or issue closure)
 

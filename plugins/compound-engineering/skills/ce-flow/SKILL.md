@@ -383,7 +383,7 @@ Can be triggered from Stage 3 (Code) when `ce-work` reports a requirements misma
 | Current stage passes, next step is clear | Advance automatically |
 | Multiple valid paths, user preference needed | Stop, present options |
 | Hard blocker (test failure, merge conflict, missing context) | Stop, explain the blocker |
-| About to ship (commit/push/PR) | Stop, request explicit authorization |
+| Review is complete but the user has not asked to ship | Stop at the review result and wait for the user's ship instruction |
 
 ---
 
@@ -410,4 +410,4 @@ Can be triggered from Stage 3 (Code) when `ce-work` reports a requirements misma
 4. **Evidence before assertion** — no "it works" without running the command
 5. **Verify before adopting** — review feedback is verified, not blindly applied
 6. **Workspace isolation gated before documents** — feature branch or worktree before requirements/plan writes unless the user explicitly accepts default-branch risk
-7. **Ship is user-triggered** — flow does not commit/push without explicit authorization
+7. **Ship is user-triggered** — flow stops at review until the user explicitly asks to ship

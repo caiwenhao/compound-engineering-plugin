@@ -70,7 +70,7 @@
 | 当前阶段通过，下一步明确 | 自动继续 |
 | 需要用户决策（多条路线、风险取舍） | 停下，展示选项 |
 | Hard blocker（测试失败、merge conflict） | 停下 |
-| 进入 ship 但无显式授权 | 停下，请求交付授权 |
+| 尚未收到用户的 ship 指令 | 停在 review 结果，等待用户决定是否交付 |
 
 ### 产物传递
 
@@ -368,11 +368,11 @@ NEEDS_WORK + finding list
 
 ## Phase 5: Ship -- "交付"
 
-> 从代码到 PR。
+> 从代码到合并的 PR，包含完整的清理和知识沉淀。
 >
-> 核心 skill：`git-commit-push-pr`
+> 核心 skill：`ce-ship`
 >
-> 核心产出：PR
+> 核心产出：已合并的 PR + 清理后的工作区 + 知识文档（条件触发）
 
 ### 前置
 
@@ -387,21 +387,59 @@ NEEDS_WORK + finding list
   [按需: git rebase origin/main]
   |
   v
-git-commit-push-pr -> PR
+ce-ship
+  |
+  ├─ Step 1-3: 状态检查、验证、同步
+  ├─ Step 4: 提交、推送、创建/更新 PR (ce-commit-push-pr)
+  |
+  ├─ Step 5: 合并 PR (NEW)
+  |    └─ gh pr merge --squash
+  |    └─ 失败 → 详细报告错误并停止
+  |
+  ├─ Step 6: 关闭关联 issue (NEW)
+  |    └─ 从 PR 描述提取 "Closes #123"
+  |    └─ gh issue close <issue-number>
+  |    └─ 失败 → 报告但继续
+  |
+  ├─ Step 7: 清理工作区 (NEW)
+  |    ├─ 检测是否在 worktree
+  |    ├─ 如果是 worktree: 删除 worktree 并切换回主仓库
+  |    ├─ 如果是 feature branch: 切换到 main + 删除本地和远程 branch
+  |    └─ git pull (同步 main)
+  |    └─ 失败 → 报告但不回滚已完成步骤
+  |
+  └─ Step 8: 知识沉淀 (MOVED)
+       └─ ce-compound
 ```
+
+### 合并策略
+
+使用 squash merge，将 feature branch 的所有 commit 压缩为一个，保持 main 历史简洁。
+
+### 失败处理
+
+- **合并失败**（CI 未过、缺 approval、conflicts、权限不足）：立即停止，提供详细错误报告（原始输出、可能原因、解决建议），不重试或等待
+- **Issue 关闭失败**：记录错误但继续清理
+- **清理失败**：报告错误但不回滚已完成的合并和 issue 关闭
+
+### 工作区清理
+
+- **Worktree**：自动删除 worktree 并切换回主仓库
+- **Feature Branch**：自动删除本地和远程 branch，切换到 main
+- **Main 同步**：清理后自动 `git pull` 确保本地 main 最新
 
 不提供直接 push main 的路径。所有交付通过 PR 完成。
 
 ### Post-hook: 知识沉淀
 
-ship 完成后自动触发 `ce-compound`（ce-flow 自动调用，不需要用户记得）：
+合并成功并完成所有清理后自动触发 `ce-compound`（ce-ship 自动调用，不需要用户记得）：
 - 非平凡 bug 已解决 -> 记录解决方案到 `docs/solutions/`
 - 新架构/模式 -> 记录可复用经验
 - 机械修改/无新知识 -> 跳过（skill 内部判断）
 
 ### Worktree 策略
 
-ce-flow 推荐使用 worktree 但不强制。用户可以选择 feature branch 或 worktree。
+ce-flow 推荐使用 worktree 但不强制。用户可以选择 feature branch 或 worktree。ce-ship 自动检测并清理两种工作区类型。
 
 ---
 
@@ -589,8 +627,8 @@ STOP 实现，报告用户:
 | `ce-work` | code | 执行 Implementation Units + post-cleanup + Coding Discipline + pivot 检测 |
 | `ce-review` | code (autofix), review | 多角色代码审查（含 architecture-depth-reviewer） |
 | `ce-debug` | bug fix | 编排器：反馈循环 -> learnings 检索 -> 根因 -> 修复 -> 验证 |
-| `git-commit` | ship | 单次提交 |
-| `git-commit-push-pr` | ship | 提交 + 推送 + 开 PR |
+| `ce-ship` | ship | 完整交付流程：提交 -> 推送 -> PR -> 合并 -> 关闭 issue -> 清理工作区 -> 知识沉淀 |
+| `ce-commit-push-pr` | ship (内部) | 提交 + 推送 + 开 PR（被 ce-ship 调用） |
 | `ce-compound` | ship (post-hook) | 知识沉淀 + 规范回流 |
 
 ### 行为纪律（superpowers）
@@ -612,9 +650,9 @@ STOP 实现，报告用户:
 
 ```
 brainstorm          plan           spike          code            review          ship
-需求文档 ---------> 实施计划 ----> 假设验证 ----> 代码变更 -----> PASS/FAIL ----> PR
-R1,R2,R3            Impl Units     VERIFIED/      staged diff     safe_auto fix   |
-CONTEXT.md          架构深度分析   FALSIFIED                      gated 裁决      |
+需求文档 ---------> 实施计划 ----> 假设验证 ----> 代码变更 -----> PASS/FAIL ----> 已合并 PR
+R1,R2,R3            Impl Units     VERIFIED/      staged diff     safe_auto fix   + 清理
+CONTEXT.md          架构深度分析   FALSIFIED                      gated 裁决      + issue 关闭
 ADR (条件)          Spike假设                                     rework loop     |
                     Test Scenarios                                (max 3 rounds)  |
                          ^                                             |          v
@@ -629,7 +667,7 @@ brainstorm     <-- learnings 自动搜索 --------------------------------------
 ce-debug       <-- learnings 自动搜索 ------------------------------------------>+
 ```
 
-R-ID 从 brainstorm 贯穿到 review。知识从 ship 回流到 plan、brainstorm、debug。领域语言从 brainstorm 贯穿到所有阶段（通过 CONTEXT.md）。Spike 验证假设在 plan 和 code 之间。Pivot 从 code 回流到 plan 或 brainstorm。Rework 在 review 和 code 之间循环。
+R-ID 从 brainstorm 贯穿到 review。知识从 ship 回流到 plan、brainstorm、debug。领域语言从 brainstorm 贯穿到所有阶段（通过 CONTEXT.md）。Spike 验证假设在 plan 和 code 之间。Pivot 从 code 回流到 plan 或 brainstorm。Rework 在 review 和 code 之间循环。Ship 现在包含完整的合并、清理和知识沉淀流程。
 
 ---
 
@@ -657,3 +695,8 @@ R-ID 从 brainstorm 贯穿到 review。知识从 ship 回流到 plan、brainstor
 | Pivot 需用户确认才执行 | Agent 可能误判，pivot 决策权在用户 |
 | 已完成 Unit 按 R-ID 追溯保留 | 精确且有据可查，避免不必要的全量回滚 |
 | 增量交付用 Sequential PRs | Stacked PRs 工具链不成熟，并行分支复杂度爆炸 |
+| ce-ship 扩展为完整交付流程 | 一次调用完成从代码到合并的全流程，减少手动步骤 |
+| 合并使用 squash merge | 保持 main 历史简洁，压缩 feature branch 的所有 commit |
+| 合并失败立即停止不重试 | 避免无效等待，用户需要手动解决 CI/approval/conflicts |
+| 自动清理 worktree 和 branch | 合并后自动清理，避免遗留垃圾分支 |
+| 清理失败不回滚合并 | 合并已完成是主要目标，清理失败可手动处理 |
