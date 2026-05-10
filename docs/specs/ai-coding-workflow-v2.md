@@ -619,7 +619,7 @@ STOP 实现，报告用户:
 | Skill | 阶段 | 角色 |
 |---|---|---|
 | `ce-flow` | 入口 | 智能编排器，状态检测 + 意图路由 + rework/spike/pivot/增量交付协议 |
-| `ce-init` | 初始化 | 为项目生成 AGENTS.md + CLAUDE.md |
+| `ce-init` | 初始化 | 为项目生成 Workflow v2 配置：AGENTS.md（含铁律和 workflow commands）+ skills/ 目录 + 软链接 + .gitignore |
 | `ce-brainstorm` | brainstorm | 需求定义（grill 风格 + 术语沉淀 + learnings 检索） |
 | `ce-ideate` | brainstorm | 创意发散 |
 | `document-review` | brainstorm, plan | 文档多人格审查 |
