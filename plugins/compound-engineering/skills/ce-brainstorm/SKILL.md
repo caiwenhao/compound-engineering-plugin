@@ -345,11 +345,11 @@ Keep ADRs minimal. Only add "Considered Options" or "Consequences" sections when
 
 ### Phase 3.5: Document Review
 
-When a requirements document was created or updated, run the `document-review` skill on it before presenting handoff options. Pass the document path as the argument.
+When a requirements document was created or updated, run the `ce-doc-review` skill on it before presenting handoff options. Pass `mode:headless <requirements-document-path>` as the argument so the mandatory post-write review runs without opening the interactive walkthrough.
 
-If document-review returns findings that were auto-applied, note them briefly when presenting handoff options. If residual P0/P1 findings were surfaced, mention them so the user can decide whether to address them before proceeding.
+If ce-doc-review returns findings that were auto-applied, note them briefly when presenting handoff options. If residual P0/P1 findings were surfaced, mention them so the user can decide whether to address them before proceeding.
 
-When document-review returns "Review complete", proceed to Phase 4.
+When ce-doc-review returns "Review complete", proceed to Phase 4.
 
 ### Phase 4: Handoff
 
