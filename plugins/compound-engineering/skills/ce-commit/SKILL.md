@@ -69,6 +69,15 @@ Follow this priority order:
 2. **Recent commit history** -- If no explicit convention is documented, examine the 10 most recent commits from Step 1. If a clear pattern emerges (e.g., conventional commits, ticket prefixes, emoji prefixes), match that pattern.
 3. **Default: conventional commits** -- If neither source provides a pattern, use conventional commit format: `type(scope): description` where type is one of `feat`, `fix`, `docs`, `refactor`, `test`, `chore`, `perf`, `ci`, `style`, `build`.
 
+**Language rule (default):** Unless repo conventions specify otherwise, commit message subject and body are written in Chinese (Simplified). The conventional commit `type(scope):` prefix remains in English. This rule applies at priority level 3 — repo conventions and established commit history patterns take precedence. Example:
+
+```
+feat(auth): 添加用户登录功能
+
+实现了基于 JWT 的用户认证流程，
+包括登录、注册和 token 刷新。
+```
+
 When using conventional commits, choose the type that most precisely describes the change (the type list above). Where `fix:` and `feat:` both seem to fit, default to `fix:`: a change that remedies broken or missing behavior is `fix:` even when implemented by adding code. Reserve `feat:` for capabilities the user could not previously accomplish. Other types remain primary when they fit better. The user may override for a specific change.
 
 ### Step 3: Consider logical commits
@@ -92,10 +101,10 @@ For each commit group, stage and commit in a single call. Prefer staging specifi
 
 ```bash
 git add file1 file2 file3 && git commit -m "$(cat <<'EOF'
-type(scope): subject line here
+feat(auth): 添加用户登录功能
 
-Optional body explaining why this change was made,
-not just what changed.
+实现了基于 JWT 的用户认证流程，
+包括登录、注册和 token 刷新。
 EOF
 )"
 ```

@@ -43,29 +43,16 @@ Then scan for existing artifacts:
 
 ## Phase 1: Workspace Check
 
-This phase is a **pre-document gate**. Run it before writing any requirements document, plan document, spike artifact, or code change.
-
-Resolve the default branch:
+Check if already in a worktree with an issue-prefixed branch:
 
 ```bash
-git rev-parse --abbrev-ref origin/HEAD 2>/dev/null || gh repo view --json defaultBranchRef --jq '.defaultBranchRef.name' 2>/dev/null || echo main
+git rev-parse --git-common-dir
+git branch --show-current
 ```
 
-If on the default branch (`main`, `master`, or the resolved default branch) and the task is non-trivial, stop before creating documents and ask:
+If the current branch matches `issue-{id}-*` pattern and is in a worktree, skip workspace creation — resume from existing state. Extract the issue number from the branch name for later use.
 
-> "You're on the default branch. Before I create requirements or plan documents, choose a workspace:
-> 1. Create a feature branch here
-> 2. Create a worktree
-> 3. Continue on the default branch"
-
-Use the platform's blocking question tool for this decision. In Codex, use `request_user_input` when available; otherwise present the numbered list and wait for the user's reply. In Claude Code, use `AskUserQuestion` after loading its schema if needed.
-
-Routing:
-- **Feature branch:** derive a short branch name from the task, create it with `git checkout -b <branch-name>`, then re-run `git branch --show-current`.
-- **Worktree:** load `ce-worktree` and create a worktree for the task. Continue the flow from the worktree checkout.
-- **Continue on default branch:** require explicit user confirmation. Record that the user accepted default-branch risk, then continue.
-
-Do not proceed to Brainstorm, Plan, or Resume Detection document writes until this gate is resolved.
+Otherwise, workspace creation is deferred to Stage 1.1 (after brainstorm produces a requirements document). The flow proceeds to brainstorm first — Issue and worktree are created once requirements are confirmed.
 
 ---
 
@@ -149,9 +136,85 @@ Use the platform's blocking question tool for decisions. In Codex, use `request_
 
 **Execute:** Load the `ce-brainstorm` skill with the user's input.
 
-**Gate:** Brainstorm produces a requirements document. Run the Document Review Gate on the requirements document before proceeding to Stage 2. Do not enter planning while blocking requirements-review findings remain unresolved unless the user explicitly accepts that risk.
+**Gate:** Brainstorm produces a requirements document. Run the Document Review Gate on the requirements document before proceeding to Stage 1.1. Do not enter planning while blocking requirements-review findings remain unresolved unless the user explicitly accepts that risk.
 
 **State:** Record requirements document path.
+
+---
+
+### Stage 1.1: Create Issue & Workspace
+
+**Trigger:** Always runs after Stage 1 Gate passes (requirements document reviewed and approved). Skip if Phase 1 detected an existing issue-prefixed worktree.
+
+**Pre-flight:** Verify `gh` CLI is available and authenticated before proceeding:
+
+```bash
+gh auth status
+```
+
+If `gh` is unavailable or not authenticated, stop and instruct the user to run `gh auth login`. Do not proceed without GitHub CLI access — Issue creation is mandatory in this workflow.
+
+**Step 1: Create GitHub Issue**
+
+Extract from the requirements document:
+- Title: the core feature/change description (in Chinese)
+- Body: structured with 背景, 需求 (R1, R2...), and 验收标准 sections
+
+Write the issue body to a temp file, then create:
+
+```bash
+ISSUE_BODY_FILE=$(mktemp "${TMPDIR:-/tmp}/ce-issue-body.XXXXXX")
+cat > "$ISSUE_BODY_FILE" <<'__CE_ISSUE_END__'
+## 背景
+
+<extracted from requirements document>
+
+## 需求
+
+- R1: <requirement 1>
+- R2: <requirement 2>
+...
+
+## 验收标准
+
+- [ ] <acceptance criterion 1>
+- [ ] <acceptance criterion 2>
+...
+__CE_ISSUE_END__
+
+gh issue create --title "<中文标题>" --body-file "$ISSUE_BODY_FILE"
+```
+
+Capture the returned issue number from the output (format: `https://github.com/.../issues/<number>`).
+
+**Error handling:** If `gh issue create` fails (rate limit, network error, permission denied), report the error and stop. Do not proceed to worktree creation without a valid issue number. The user must resolve the issue (authenticate, retry, check permissions) and re-run the flow.
+
+**Step 2: Derive branch name**
+
+Format: `issue-{id}-{english-slug}` where slug is a 2-4 word English summary derived from the requirements title (lowercase, hyphen-separated, max 50 chars total for the branch name).
+
+Slug derivation rules:
+- Extract the core action and object from the requirements title
+- Translate to 2-4 English words (e.g., "添加用户登录" → "add-user-login")
+- Lowercase, hyphen-separated, no special characters
+- If derivation is ambiguous, use the most obvious translation
+
+Examples:
+- Issue #42 "添加用户登录功能" → `issue-42-add-user-login`
+- Issue #99 "修复认证跳转问题" → `issue-99-fix-auth-redirect`
+
+**Step 3: Create worktree**
+
+Load `ce-worktree` to create the workspace:
+
+```bash
+bash "${CLAUDE_SKILL_DIR:-.}/scripts/worktree-manager.sh" create issue-{id}-{slug}
+cd .worktrees/issue-{id}-{slug}
+```
+
+**Error handling:** If worktree creation fails (branch already exists, path collision), report the error with the specific failure reason. Offer to retry with a modified slug (e.g., append `-2`) or ask the user to resolve the conflict manually. Do not leave the user in a state where the issue exists but no workspace is available.
+
+**State:** Record issue number, branch name, and worktree path.
 
 ---
 
@@ -409,5 +472,5 @@ Can be triggered from Stage 3 (Code) when `ce-work` reports a requirements misma
 3. **Root cause before fix** — no fix without understanding why it's broken
 4. **Evidence before assertion** — no "it works" without running the command
 5. **Verify before adopting** — review feedback is verified, not blindly applied
-6. **Workspace isolation gated before documents** — feature branch or worktree before requirements/plan writes unless the user explicitly accepts default-branch risk
+6. **Issue + worktree before implementation** — every non-trivial task gets a GitHub Issue and a dedicated worktree named `issue-{id}-{slug}` before plan or code writes
 7. **Ship is user-triggered** — flow stops at review until the user explicitly asks to ship

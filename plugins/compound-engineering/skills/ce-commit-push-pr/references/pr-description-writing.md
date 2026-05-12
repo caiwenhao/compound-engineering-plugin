@@ -177,8 +177,9 @@ In order:
 1. **Opening** — the narrative frame from Step B, sized per Step C. Under `## Summary` if the body uses any `##` headings; bare paragraph otherwise.
 2. **Body sections** — only those that earn their keep: what changed and why, design decisions, tables, visual aids. Skip empty sections entirely.
 3. **Test plan** — only when non-obvious.
-4. **Evidence block** — preserved or freshly captured, only if one exists.
-5. **Compound Engineering badge** — append after a `---` rule. Skip if regenerating a body that already contains the badge.
+4. **Issue reference** — if the branch name matches `issue-{id}-*` where `{id}` is numeric, append `Closes #{id}` on its own line. Extract using regex validation (only numeric IDs). If the branch name does not match or the ID is non-numeric, skip this step silently — do not append malformed references. If the caller passed an issue number in shipping context, use that directly.
+5. **Evidence block** — preserved or freshly captured, only if one exists.
+6. **Compound Engineering badge** — append after a `---` rule. Skip if regenerating a body that already contains the badge.
 
 ### Badge
 

@@ -60,6 +60,15 @@ Note the existing PR URL from the PR check if `state: OPEN`. Step 5 uses it to r
 
 Match repo style for commit messages and PR titles (project instructions in context > recent commits > conventional commits as default). With conventional commits, default to `fix:` over `feat:` when ambiguous — adding code to remedy broken or missing behavior is `fix:`. Reserve `feat:` for capabilities the user could not previously accomplish. The user may override.
 
+**Language rule (default):** Unless repo conventions specify otherwise, commit message subject and body are written in Chinese (Simplified). The conventional commit `type(scope):` prefix remains in English. This rule applies at the default level — repo conventions and established commit history patterns take precedence. Example:
+
+```
+feat(auth): 添加用户登录功能
+
+实现了基于 JWT 的用户认证流程，
+包括登录、注册和 token 刷新。
+```
+
 ## Step 3: Commit and push
 
 If on the default branch, branch creation needs to handle stale local `<base>`, unpushed commits on local `<base>`, and uncommitted changes that collide with the fresh remote base. Read `references/branch-creation.md` and follow its decision flow before continuing.
@@ -70,7 +79,10 @@ Stage and commit each group. **Avoid `git add -A` and `git add .`** — they swe
 
 ```bash
 git add file1 file2 file3 && git commit -m "$(cat <<'EOF'
-commit message here
+feat(auth): 添加用户登录功能
+
+实现了基于 JWT 的用户认证流程，
+包括登录、注册和 token 刷新。
 EOF
 )"
 ```

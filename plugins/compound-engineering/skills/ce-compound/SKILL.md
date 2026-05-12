@@ -224,7 +224,55 @@ The orchestrating agent (main conversation) performs these steps:
 5. Validate YAML frontmatter against `references/schema.yaml`, including the YAML-safety quoting rule for array items (see `references/yaml-schema.md` > YAML Safety Rules)
 6. Create directory if needed: `mkdir -p docs/solutions/[category]/`
 7. Write the file: either the updated existing doc or the new `docs/solutions/[category]/[filename].md`
-8. **Run `python3 scripts/validate-frontmatter.py <output-path>`** to catch silent-corruption parser-safety issues that the prose rules miss: malformed `---` delimiter lines, unquoted ` #` in scalar values (silent comment truncation), and unquoted `: ` in scalar values (silent mapping confusion). Exit 0 means the doc is parser-safe; exit 1 means the script's stderr names the offending field(s) and what to fix — quote the value(s), re-write the doc, and re-run until exit 0. Do not declare success while validation fails. The script does not enforce schema rules and does not flag YAML reserved-indicator characters (those produce loud parser errors downstream rather than silent corruption — out of scope). Uses Python 3 stdlib only (no PyYAML or other deps).
+
+8. **Wiki Sync (best-effort)**
+
+   After writing the local file, attempt to sync it to the GitHub Wiki. Wiki write failure does not affect the local file's success status.
+
+   **Step 8.1: Check wiki availability**
+
+   ```bash
+   gh api repos/{owner}/{repo} --jq '.has_wiki'
+   ```
+
+   If `gh` is unavailable, the API call fails, or `has_wiki` is `false`, output a one-line warning: "Wiki 未启用或未初始化，知识仅写入本地 docs/solutions/" and skip to step 9.
+
+   **Step 8.2: Clone wiki repository**
+
+   ```bash
+   git clone --depth 1 https://github.com/{owner}/{repo}.wiki.git /tmp/ce-wiki-sync-$(date +%s)/
+   ```
+
+   If clone fails (wiki not initialized — requires at least one page created via GitHub UI), output a one-line warning: "Wiki 未初始化（需先在 GitHub UI 创建首页），知识仅写入本地 docs/solutions/" and skip to step 9.
+
+   **Step 8.3: Create wiki page**
+
+   Copy the local file content to the wiki directory using flat naming: `{category}-{slug}.md`. The category and slug are derived from the local path `docs/solutions/{category}/{slug}.md`.
+
+   Example: `docs/solutions/workflow/stale-local-base.md` → wiki file `workflow-stale-local-base.md`
+
+   The wiki page content is identical to the local file (including YAML frontmatter), ensuring LLM agents can search wiki pages by frontmatter fields.
+
+   **Step 8.4: Commit and push**
+
+   ```bash
+   cd /tmp/ce-wiki-sync-*/
+   git add .
+   git commit -m "sync: {slug}"
+   git push
+   ```
+
+   If push fails (e.g., conflict), log the error and skip. Do not retry or attempt conflict resolution.
+
+   **Step 8.5: Cleanup**
+
+   Remove the temporary clone directory:
+
+   ```bash
+   rm -rf /tmp/ce-wiki-sync-*/
+   ```
+
+9. **Run `python3 scripts/validate-frontmatter.py <output-path>`** to catch silent-corruption parser-safety issues that the prose rules miss: malformed `---` delimiter lines, unquoted ` #` in scalar values (silent comment truncation), and unquoted `: ` in scalar values (silent mapping confusion). Exit 0 means the doc is parser-safe; exit 1 means the script's stderr names the offending field(s) and what to fix — quote the value(s), re-write the doc, and re-run until exit 0. Do not declare success while validation fails. The script does not enforce schema rules and does not flag YAML reserved-indicator characters (those produce loud parser errors downstream rather than silent corruption — out of scope). Uses Python 3 stdlib only (no PyYAML or other deps).
 
 When creating a new doc, preserve the section order from `assets/resolution-template.md` unless the user explicitly asks for a different structure.
 

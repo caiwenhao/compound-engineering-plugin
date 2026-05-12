@@ -64,6 +64,8 @@ If the repository's default branch is not `main`, substitute the detected defaul
 
 ### Step 4: Commit, Push, and PR
 
+If the current branch matches `issue-{id}-*` pattern (where `{id}` is numeric), extract the issue number. If the branch name does not match or the ID is non-numeric, skip issue extraction silently — the PR body will not include an auto-close reference. Pass the extracted issue number as shipping context to `ce-commit-push-pr` so the PR body includes `Closes #{id}` to auto-close the issue on merge.
+
 Load `ce-commit-push-pr` with the shipping context. It owns:
 
 - Commit convention detection
@@ -84,7 +86,7 @@ Attempt to merge the PR immediately using squash merge:
 gh pr merge --squash --auto=false
 ```
 
-**On success:** Continue to Step 6.
+**On success:** Continue to Step 5.5.
 
 **On failure:** Stop and provide detailed error report including:
 - The raw error output from `gh pr merge`
@@ -92,6 +94,82 @@ gh pr merge --squash --auto=false
 - Suggested next steps for the user
 
 Do not retry or wait for conditions to change. The user must resolve blockers manually.
+
+### Step 5.5: Test Instructions Comment
+
+After successful merge, post a structured manual testing comment on each related issue. This step is best-effort — failure does not block subsequent steps.
+
+**Pre-flight:** Verify `gh` CLI is authenticated:
+
+```bash
+gh auth status
+```
+
+If `gh` is unavailable or not authenticated, generate the test instructions content (see below), write it to `/tmp/ce-ship-test-instructions-{issue-id}.md`, inform the user of the file path, and skip to Step 6.
+
+**Testability check:** Determine whether the PR has observable behavior changes. Skip this step silently (proceed to Step 6) if either condition is true:
+- The PR title type prefix is one of: `docs:`, `refactor:`, `chore:`, `ci:`, `style:`, `test:`
+- All changed files are in `docs/`, `.github/`, or are `*.md` files (excluding files named `SKILL.md` or ending in `.agent.md`)
+
+**Generate test instructions:**
+
+Produce a structured test guide with four sections:
+1. **前置条件** — environment setup, data prerequisites, required services
+2. **操作步骤** — step-by-step actions to verify the change
+3. **预期结果** — observable correct behavior after each step
+4. **边界情况** — edge cases worth additional verification
+
+Content source priority:
+1. If a plan document exists for this work (check `docs/plans/` for a file matching the branch name or issue number), extract test scenarios from its Implementation Units' `Test scenarios` and `Verification` fields
+2. Otherwise, infer test steps from the PR diff and issue description
+
+**Idempotent update:** Before posting, check for an existing comment with the marker:
+
+```bash
+EXISTING_COMMENT_ID=$(gh api "repos/{owner}/{repo}/issues/{issue-number}/comments" --jq '.[] | select(.body | contains("<!-- ce-ship-test-instructions -->")) | .id')
+```
+
+**Post or update the comment:**
+
+If `EXISTING_COMMENT_ID` is non-empty, update the existing comment:
+
+```bash
+gh api --method PATCH "repos/{owner}/{repo}/issues/comments/$EXISTING_COMMENT_ID" -f body="$COMMENT_BODY"
+```
+
+Otherwise, create a new comment:
+
+```bash
+gh issue comment {issue-number} --body "$COMMENT_BODY"
+```
+
+**Comment format:**
+
+```markdown
+<!-- ce-ship-test-instructions -->
+<details>
+<summary>手动测试说明（自动生成）</summary>
+
+## 前置条件
+
+{preconditions}
+
+## 操作步骤
+
+{steps}
+
+## 预期结果
+
+{expected results}
+
+## 边界情况
+
+{edge cases}
+
+</details>
+```
+
+If the comment post or update fails, log the error and continue to Step 6. Do not retry.
 
 ### Step 6: Close Related Issues
 
