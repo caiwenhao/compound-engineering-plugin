@@ -321,6 +321,21 @@ Ask the user only when the answer materially affects architecture, scope, sequen
 
 ### Phase 3: Structure the Plan
 
+#### 3.0 Durable Doc Workspace Preflight
+
+Before writing or updating a repo-tracked plan for a software task (`docs/plans/*`), check the current git location:
+
+```bash
+git branch --show-current
+git rev-parse --abbrev-ref --symbolic-full-name @{u} 2>/dev/null || true
+git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null || true
+git rev-parse --git-common-dir
+```
+
+If the current checkout is `main`, `master`, or the resolved default branch, create a feature worktree before writing the plan. Use the `ce-worktree` skill with a meaningful branch name derived from the topic or origin requirements document (for example, `issue/284-admin-mobile-emergency-ops` when the issue number is known, otherwise `feat/<topic-slug>`), switch into that worktree, then write the plan there. Plans are part of the feature branch alongside the requirements document and later implementation; do not write them on the default checkout and copy them after the fact.
+
+If already on a feature branch or inside a worktree, continue in the current checkout. If the user explicitly asked to only draft a plan in the current checkout, honor that explicit instruction and mention the branch/worktree tradeoff.
+
 #### 3.1 Title and File Naming
 
 - Draft a clear, searchable title using conventional format such as `feat: Add user authentication` or `fix: Prevent checkout double-submit`

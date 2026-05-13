@@ -14,6 +14,12 @@ Use this when code work and review are done and the user wants to complete the f
 
 <shipping_context> #$ARGUMENTS </shipping_context>
 
+## Authorization Model
+
+An explicit `ce-ship` invocation is a single authorization to run the normal shipping pipeline end to end: commit, push, open or update the PR, merge it, close related issues, clean up the feature branch or worktree, sync the default branch, and evaluate learning capture. Do not ask separate confirmation questions for those expected shipping steps.
+
+This authorization does not override stop conditions. Stop when verification fails, rebase conflicts occur, required credentials or remotes are unavailable, PR merge fails, or the current checkout is the default branch. Also stop before any action outside the documented shipping pipeline or any destructive action unrelated to the shipped branch/worktree.
+
 ## Workflow
 
 ### Step 1: Pre-ship State Check
@@ -66,7 +72,7 @@ If the repository's default branch is not `main`, substitute the detected defaul
 
 If the current branch matches `issue-{id}-*` pattern (where `{id}` is numeric), extract the issue number. If the branch name does not match or the ID is non-numeric, skip issue extraction silently — the PR body will not include an auto-close reference. Pass the extracted issue number as shipping context to `ce-commit-push-pr` so the PR body includes `Closes #{id}` to auto-close the issue on merge.
 
-Load `ce-commit-push-pr` with the shipping context. It owns:
+Load `ce-commit-push-pr` in ship-orchestrated mode with the shipping context. It owns:
 
 - Commit convention detection
 - File-level logical commit grouping
@@ -76,7 +82,7 @@ Load `ce-commit-push-pr` with the shipping context. It owns:
 - PR title/body generation
 - Optional evidence capture via `ce-demo-reel`
 
-Do not duplicate that logic here.
+Do not duplicate that logic here. Because `ce-ship` already carries end-to-end authorization, tell `ce-commit-push-pr` that it must not ask for separate confirmation before committing, pushing, creating/updating the PR, or applying the PR title/body. If it needs evidence and no evidence was explicitly requested, it should infer from the diff and proceed without blocking the ship flow.
 
 ### Step 5: Merge PR
 
@@ -263,7 +269,6 @@ Stop before shipping if:
 - Verification fails
 - Rebase conflicts occur
 - Required credentials or remotes are unavailable
-- The user declines any required confirmation from `ce-commit-push-pr`
 
 Stop after PR creation if:
 
@@ -275,4 +280,3 @@ Continue despite non-critical failures:
 
 - Issue closure fails (log error but continue to cleanup)
 - Cleanup steps fail (report error but do not roll back merge or issue closure)
-

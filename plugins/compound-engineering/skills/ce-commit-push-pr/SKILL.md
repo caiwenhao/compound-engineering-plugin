@@ -11,6 +11,7 @@ description: Commit, push, and open a PR with an adaptive, value-first descripti
 
 - **Description-only** — user wants *just* a description ("write/draft a PR description", "describe this PR", or pasted a PR URL/number alone). Run Step 4 only; print the result. Apply only if the user asks. If a PR ref was pasted, pass it to Step 4 so Pre-A resolves the right range.
 - **Description update** — user wants to refresh/rewrite an existing PR's description with no commit/push intent. If no open PR, report and stop. Otherwise run Step 4 (PR mode using the existing PR's URL), then Step 5 to preview, confirm, and apply via `gh pr edit`.
+- **Ship-orchestrated full workflow** — when invoked by `ce-ship` or when shipping context says the full delivery is already authorized. Run the full workflow without extra confirmation prompts for commit, push, PR creation/update, or applying the PR title/body. Existing PRs are updated by default. Evidence capture remains optional: capture only when explicitly requested or when already available without blocking; otherwise proceed without evidence and mention the omission in the PR body only if useful.
 - **Full workflow** — otherwise. Run Steps 1-5 in order.
 
 ## Context
@@ -104,6 +105,8 @@ If the working tree is clean and all commits are already pushed, this step is a 
 1. **User explicitly asked for evidence** ("ship with a demo", "include a screenshot") — proceed directly to capture. If capture is impossible or clearly not useful, note briefly and proceed without.
 2. **Agent judgment on authored changes** — if you authored the commits and know the change is non-observable (internal plumbing, type-only, backend refactor without user-facing effect, docs/markdown/changelog/CI/test-only, pure refactors), skip the prompt without asking.
 
+In ship-orchestrated full workflow, skip this prompt. Capture evidence only when it was explicitly requested or is already available without blocking; otherwise proceed without an evidence section.
+
 Otherwise, if the branch diff changes observable behavior (UI, CLI output, API behavior with runnable code, generated artifacts, workflow output) and evidence is not blocked (unavailable credentials, paid services, deploy-only infrastructure, hardware), ask: "This PR has observable behavior. Capture evidence for the PR description?"
 
 - **Capture now** — load `ce-demo-reel` with a target description from the branch diff. It returns `Tier`, `Description`, `URL`, `Path`. Exactly one of `URL`/`Path` contains a real value; the other is `"none"`. If `URL`, splice as a `## Demo` section. If `Path` (user chose local save), note in the body that a demo was recorded but is not embedded. If skipped, proceed without evidence.
@@ -118,12 +121,16 @@ Then continue with the rest of the reference (Steps A through G) to compose the 
 
 **New PR** (full workflow, no existing PR from Step 1) — apply per "Applying via gh" below using `gh pr create`. Report the URL.
 
+**Existing PR** (ship-orchestrated full workflow, found in Step 1) — the new commits are already on the PR from Step 3. Run Step 4 if not already done, update the PR title/body via `gh pr edit`, and report the URL. Do not ask whether to rewrite the description.
+
 **Existing PR** (full workflow, found in Step 1) — the new commits are already on the PR from Step 3. Report the PR URL, then ask whether to rewrite the description.
 
 - **No** — done.
 - **Yes** — run Step 4 if not already done, then preview and apply (see below).
 
 **Description update mode, or existing-PR rewrite confirmed** — preview before applying. Ask: "New title: `<title>` (`<N>` chars). Summary leads with: `<first two sentences>`. Total body: `<L>` lines. Apply?" If declined, the user may pass focus text back for a regenerate; do not apply. If confirmed, apply per "Applying via gh" below using `gh pr edit` and report the URL.
+
+In ship-orchestrated full workflow, apply the title/body directly after composition. Do not run the preview confirmation.
 
 ---
 

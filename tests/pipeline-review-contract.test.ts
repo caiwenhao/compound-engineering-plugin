@@ -7,6 +7,28 @@ async function readRepoFile(relativePath: string): Promise<string> {
 }
 
 describe("ce-work review contract", () => {
+  test("ce-ship treats explicit invocation as end-to-end shipping authorization", async () => {
+    const ship = await readRepoFile("plugins/compound-engineering/skills/ce-ship/SKILL.md")
+
+    expect(ship).toContain("## Authorization Model")
+    expect(ship).toContain("An explicit `ce-ship` invocation is a single authorization")
+    expect(ship).toContain("Do not ask separate confirmation questions for those expected shipping steps.")
+    expect(ship).toContain("This authorization does not override stop conditions.")
+    expect(ship).toContain("must not ask for separate confirmation before committing, pushing, creating/updating the PR")
+    expect(ship).not.toContain("The user declines any required confirmation from `ce-commit-push-pr`")
+  })
+
+  test("ce-commit-push-pr supports non-blocking ship-orchestrated mode", async () => {
+    const commitPushPr = await readRepoFile("plugins/compound-engineering/skills/ce-commit-push-pr/SKILL.md")
+
+    expect(commitPushPr).toContain("Ship-orchestrated full workflow")
+    expect(commitPushPr).toContain("without extra confirmation prompts for commit, push, PR creation/update")
+    expect(commitPushPr).toContain("skip this prompt")
+    expect(commitPushPr).toContain("Existing PRs are updated by default.")
+    expect(commitPushPr).toContain("Do not ask whether to rewrite the description.")
+    expect(commitPushPr).toContain("Do not run the preview confirmation.")
+  })
+
   test("requires code review before shipping", async () => {
     const content = await readRepoFile("plugins/compound-engineering/skills/ce-work/SKILL.md")
     // Review content extracted to references/shipping-workflow.md
@@ -279,6 +301,19 @@ describe("ce:plan remains neutral during ce:work-beta rollout", () => {
 })
 
 describe("ce-brainstorm review contract", () => {
+  test("checks workspace isolation before writing durable requirements docs", async () => {
+    const content = await readRepoFile("plugins/compound-engineering/skills/ce-brainstorm/SKILL.md")
+
+    expect(content).toContain("#### Durable Doc Workspace Preflight")
+    expect(content).toContain("Before writing or updating repo-tracked durable docs for a software task")
+    expect(content).toContain("`docs/brainstorms/*`, `CONTEXT.md`, or `docs/adr/*`")
+    expect(content).toContain("git branch --show-current")
+    expect(content).toContain("git rev-parse --git-common-dir")
+    expect(content).toContain("If the current checkout is `main`, `master`, or the resolved default branch")
+    expect(content).toContain("Use the `ce-worktree` skill")
+    expect(content).toContain("do not leave planning artifacts on the default checkout and copy them after the fact")
+  })
+
   test("exposes document review as an opt-in handoff option", async () => {
     const content = await readRepoFile("plugins/compound-engineering/skills/ce-brainstorm/SKILL.md")
     const handoff = await readRepoFile("plugins/compound-engineering/skills/ce-brainstorm/references/handoff.md")
@@ -314,6 +349,19 @@ describe("ce-plan testing contract", () => {
 })
 
 describe("ce-plan review contract", () => {
+  test("checks workspace isolation before writing durable plan docs", async () => {
+    const content = await readRepoFile("plugins/compound-engineering/skills/ce-plan/SKILL.md")
+
+    expect(content).toContain("#### 3.0 Durable Doc Workspace Preflight")
+    expect(content).toContain("Before writing or updating a repo-tracked plan for a software task")
+    expect(content).toContain("`docs/plans/*`")
+    expect(content).toContain("git branch --show-current")
+    expect(content).toContain("git rev-parse --git-common-dir")
+    expect(content).toContain("If the current checkout is `main`, `master`, or the resolved default branch")
+    expect(content).toContain("Use the `ce-worktree` skill")
+    expect(content).toContain("do not write them on the default checkout and copy them after the fact")
+  })
+
   test("requires document review after confidence check", async () => {
     // Document review instructions extracted to references/plan-handoff.md
     const content = await readRepoFile("plugins/compound-engineering/skills/ce-plan/references/plan-handoff.md")

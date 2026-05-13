@@ -8,6 +8,27 @@ async function readRepoFile(relativePath: string): Promise<string> {
 }
 
 describe("ce-code-review contract", () => {
+  test("keeps ce-review as a thin compatibility alias", async () => {
+    const content = await readRepoFile("plugins/compound-engineering/skills/ce-review/SKILL.md")
+    const frontmatter = parseFrontmatter(content)
+
+    expect(frontmatter.data.name).toBe("ce-review")
+    expect(frontmatter.data.description).toContain("Legacy compatibility alias")
+    expect(frontmatter.body).toContain("Invoke `ce-code-review` with the same arguments")
+    expect(frontmatter.body).toContain("Do not run an independent review workflow from this skill.")
+    expect(frontmatter.body).toContain("Do not reinterpret this alias as report-only.")
+    expect(frontmatter.body).toContain("automatic `safe_auto -> review-fixer` fixes")
+    expect(frontmatter.body).toContain("Use `mode:report-only` explicitly only when the user asks for a read-only review.")
+
+    expect(content).not.toContain("## Mode Detection")
+    expect(content).not.toContain("## Reviewers")
+    expect(content).not.toContain("## Review Scope")
+    expect(content).not.toContain("## How to Run")
+    expect(content).not.toContain("references/")
+    expect(content).not.toContain("/tmp/compound-engineering/ce-review")
+    expect(content).not.toContain(".context/compound-engineering/ce-review")
+  })
+
   test("documents explicit modes and orchestration boundaries", async () => {
     const content = await readRepoFile("plugins/compound-engineering/skills/ce-code-review/SKILL.md")
 

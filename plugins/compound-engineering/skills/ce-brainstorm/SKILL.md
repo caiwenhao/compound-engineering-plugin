@@ -259,6 +259,21 @@ Fires for **all tiers** including Lightweight. Skip Phase 2.5 entirely on the Ph
 
 Write or update a requirements document only when the conversation produced durable decisions worth preserving. Read `references/requirements-capture.md` for the document template, formatting rules, visual aid guidance, and completeness checks.
 
+#### Durable Doc Workspace Preflight
+
+Before writing or updating repo-tracked durable docs for a software task (`docs/brainstorms/*`, `CONTEXT.md`, or `docs/adr/*`), check the current git location:
+
+```bash
+git branch --show-current
+git rev-parse --abbrev-ref --symbolic-full-name @{u} 2>/dev/null || true
+git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null || true
+git rev-parse --git-common-dir
+```
+
+If the current checkout is `main`, `master`, or the resolved default branch, create a feature worktree before writing the document. Use the `ce-worktree` skill with a meaningful branch name derived from the topic (for example, `issue/284-admin-mobile-emergency-ops` when the issue number is known, otherwise `feat/<topic-slug>`), switch into that worktree, then write the requirements document there. Requirements and later plan/code changes are part of the same feature branch; do not leave planning artifacts on the default checkout and copy them after the fact.
+
+If already on a feature branch or inside a worktree, continue in the current checkout. If the user explicitly asked to only draft a document in the current checkout, honor that explicit instruction and mention the branch/worktree tradeoff.
+
 For **Lightweight** brainstorms, keep the document compact. Skip document creation when the user only needs brief alignment and no durable decisions need to be preserved.
 
 For very small requirements docs with only 1-3 simple requirements, plain bullet requirements are acceptable. For **Standard** and **Deep** requirements docs, use stable IDs like `R1`, `R2`, `R3` so planning and later review can refer to them unambiguously.
